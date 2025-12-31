@@ -2,14 +2,6 @@
 #define MATRIX_CONFIG
 #include <FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX.h>
 
-#ifdef LEDMATRIX
-// Please use https://github.com/marcmerlin/LEDMatrix/ at least as recent as
-// https://github.com/marcmerlin/LEDMatrix/commit/597ce703e924d45b2e676d6558c4c74a8ebc6991
-// or https://github.com/Jorgen-VikingGod/LEDMatrix/commit/a11e74c8cd5b933021b6e15eb067280a52691449
-// zero copy/no malloc code to work.
-#include <LEDMatrix.h>
-#endif
-
 // Step 1) Provide the size of each individual physical panel LED Matrix panel that is chained (or not) together
 #define PANEL_RES_X 64 // Number of pixels wide of each INDIVIDUAL panel module. 
 #define PANEL_RES_Y 64 // Number of pixels tall of each INDIVIDUAL panel module.
@@ -25,9 +17,8 @@
 // Refer to: https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/tree/master/examples/VirtualMatrixPanel
 //      and: https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/blob/master/doc/VirtualMatrixPanel.pdf
 
-// Virtual Panel dimensions - our combined panel would be a square 4x4 modules with a combined resolution of 128x128 pixels
 #define VPANEL_W PANEL_RES_X*NUM_COLS
-#define VPANEL_H PANEL_RES_Y*NUM_ROWS 
+#define VPANEL_H PANEL_RES_Y*NUM_ROWS
 
 // Step 4) Pin definitions
 // custom pin mapping (this one is Adafruit Matrixportal ESP32S3
@@ -45,6 +36,22 @@
 #define CLK 2
 #define LAT 47
 #define OE  14
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+///
+/// CONFIG STOPS HERE. Everything below is common code to all demos
+///
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef LEDMATRIX
+// Please use https://github.com/marcmerlin/LEDMatrix/ at least as recent as
+// https://github.com/marcmerlin/LEDMatrix/commit/597ce703e924d45b2e676d6558c4c74a8ebc6991
+// or https://github.com/Jorgen-VikingGod/LEDMatrix/commit/a11e74c8cd5b933021b6e15eb067280a52691449
+// zero copy/no malloc code to work.
+#include <LEDMatrix.h>
+#endif
 
 HUB75_I2S_CFG::i2s_pins _pins={R1, G1, B1, R2, G2, B2, CH_A, CH_B, CH_C, CH_D, CH_E, LAT, OE, CLK};
 
