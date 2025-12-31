@@ -18,30 +18,32 @@
   <http://www.gnu.org/licenses/>.
   --------------------------------------------------------------------*/
 
-#ifndef _FastLED_RPIRGBPanel_GFX_H_
-#define _FastLED_RPIRGBPanel_GFX_H_
+#ifndef _FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX_H_
+#define _FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX_H_
 #include "Framebuffer_GFX.h"
 #include "FastLED.h"
+#include "ESP32-VirtualMatrixPanel-I2S-DMA.h"
 
-// https://github.com/hzeller/rpi-rgb-led-matrix
-#undef min
-#undef max
-#include <led-matrix.h>
-using rgb_matrix::RGBMatrix;
-using rgb_matrix::Canvas;
-
-class FastLED_RPIRGBPanel_GFX : public Framebuffer_GFX {
+class FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX : public Framebuffer_GFX {
   public:
-    FastLED_RPIRGBPanel_GFX(CRGB *, uint16_t, uint16_t);
-    void setCanvas(Canvas *canvas) { _canvas = canvas; }
+    FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX(CRGB *, uint16_t, uint16_t, VirtualMatrixPanel *, MatrixPanel_I2S_DMA *);
+    // These 2 methods are useful if the object is defined in global space, but the
+    // framebuffer and hub75 objects don't exist yet because they get defined in setup()
+    // when it's easier to allocate memory with malloc (on ESP32 more RAM is available via 
+    // malloc than static array allocation in global space)
+    void setvirtdisp(VirtualMatrixPanel *virtualDisp) { _virtdisp = virtualDisp; }
+    void sethub75matrix(MatrixPanel_I2S_DMA *hub75matrix) { _hub75matrix = hub75matrix; }
     void show();
+    void setBrightness(uint8_t b) { _hub75matrix->setBrightness(b); };
 
   protected:
-    Canvas *_canvas;
 
   private:
     const uint16_t _fbw, _fbh;
+    CRGB *__fb;
+    VirtualMatrixPanel *_virtdisp;
+    MatrixPanel_I2S_DMA *_hub75matrix;
 };
 
-#endif // _FastLED_RPIRGBPanel_GFX_H_
+#endif // _FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX_H_
 // vim:sts=4:sw=4
