@@ -2,6 +2,14 @@
 #define MATRIX_CONFIG
 #include <FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX.h>
 
+#ifdef LEDMATRIX
+// Please use https://github.com/marcmerlin/LEDMatrix/ at least as recent as
+// https://github.com/marcmerlin/LEDMatrix/commit/597ce703e924d45b2e676d6558c4c74a8ebc6991
+// or https://github.com/Jorgen-VikingGod/LEDMatrix/commit/a11e74c8cd5b933021b6e15eb067280a52691449
+// zero copy/no malloc code to work.
+#include <LEDMatrix.h>
+#endif
+
 // Step 1) Provide the size of each individual physical panel LED Matrix panel that is chained (or not) together
 #define PANEL_RES_X 64 // Number of pixels wide of each INDIVIDUAL panel module. 
 #define PANEL_RES_Y 64 // Number of pixels tall of each INDIVIDUAL panel module.
@@ -127,9 +135,14 @@ void *mallocordie(const char *varname, uint32_t req, bool psram=true) {
     return NULL;
 }
 
-void matrix_setup() {
-    Serial.begin(115200);
-    delay(250);
+void matrix_setup(bool initserial=true, int reservemem = 40000) {
+    reservemem = reservemem; // squelch compiler warning if var is unused.
+
+    if (initserial) {
+	Serial.begin(115200);
+        Serial.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Serial.begin");
+	delay(250);
+    }
 
     Serial.println("Matrix FB Init");
     // ESP32 has more memory available for allocation in setup than in global
