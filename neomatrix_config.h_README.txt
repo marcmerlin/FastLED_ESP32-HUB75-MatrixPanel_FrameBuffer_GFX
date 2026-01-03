@@ -1,0 +1,29 @@
+This file is a symlink to examples/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
+https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
+
+You should be able to get it via
+git pull --recurse-submodules
+
+If this does not work, just get 
+https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
+and manually pull/copy neomatrix_config.h
+
+This file is externally maintained with all the demos I have there because it 
+allows those demos to work on around 10 hardware backends, including this library.
+
+If you find it's way too big and scary, you can use the shorter matrix_config.h
+instead, which provides the basic functionality without all the ifdefs, but it's
+also missing some common code used by some of the demos, so if you want all the
+demos to work, you really want to use neomatrix_config.h
+
+Please look in the file for ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64 and notice
+how Sublime_Demos and Table_Mark_Estes69 have neomatrix_config_whichdefine.h
+to set which config you want to enable without having to change the full
+neomatrix_config.h for each demo
+
+Your display is not an Adafruit S3 Portal? Not a problem, find the defines for
+ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64, make a new code block for your display
+with ESP32_HUB75_MATRIXPANEL_YOUR_DISPLAY and then set that define in
+neomatrix_config_whichdefine.h in each demo that uses that hardware and resolution
+
+Enjoy
