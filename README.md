@@ -7,9 +7,14 @@ trio of APIs: FastLED, Adafruit::GFX (via Adafruit::NeoMatrix compatibility usin
 and LEDMatrix compatibility too. To get example demo code, go to:
 https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
 
-Please see this code to see how to use the driver:
-* https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos/blob/022257656e2f1beabe327e88bb96747c0fc955f9/neomatrix_config.h#L262
-* https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos/blob/022257656e2f1beabe327e88bb96747c0fc955f9/neomatrix_config.h#L697
+How to use?
+-----------
+Please see this code to see how to use the framebuffer driver:
+* This is where you edit or add a new matrix definition: https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos/blob/d416eb81f084631a9fc5023a7efaac34a9faeba4/neomatrix_config.h#L565
+* Look for ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64 and ESP32_HUB75_MATRIXPANEL elsewhere in the file, although you should not need to modify anything but the first section with pin definition and layout, but if you have multiple kinds of panels, you're better off making new ifdefs for those new options
+* the rest of the hub75matrix init code is in matrix_setup() which you call from your own setup(), and should not need to be modified: https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos/blob/d416eb81f084631a9fc5023a7efaac34a9faeba4/neomatrix_config.h#L1511
+
+If you want something a bit simpler, you can look at https://github.com/marcmerlin/FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX/blob/main/matrix_config.h  which will get basic demos working but it does not provide the full list of definitions and helper functions available in neomatrix_config.  It gets the work done for basic demos, you can look at BasicTest, which shows you the beauty of those include files, as the demo file is super short
 
 But you may want to ask why? After all mrcodetastic's library gives Adafruit::GFX compatibility.
 
