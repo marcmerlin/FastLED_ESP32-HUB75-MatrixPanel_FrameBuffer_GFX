@@ -1,6 +1,12 @@
 This file is a symlink to examples/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
 https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
 
+If you can please symlink it to
+examples/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos/neomatrix_config.h
+as the copy here is likely out of date, although should be working.
+I'm not allowed to symlnk them because the arduino library manager does not allow 
+it, but do it locally if you can.
+
 You should be able to get it via
 git pull --recurse-submodules
 
