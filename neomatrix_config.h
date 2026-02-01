@@ -1517,6 +1517,8 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
         HUB75_I2S_CFG mxconfig(PANEL_RES_X, PANEL_RES_Y, PANEL_CHAIN);
 
         mxconfig.gpio = _pins;
+        // Can help with an off by one pixel display error on some panels
+        mxconfig.clkphase = false;
 
         // OK, now we can create our matrix object
         hub75matrix = new MatrixPanel_I2S_DMA(mxconfig);
