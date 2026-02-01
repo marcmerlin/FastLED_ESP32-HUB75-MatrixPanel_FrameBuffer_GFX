@@ -9,6 +9,8 @@ https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
 
 Here is a video demo of a 24bpp framebuffer based set of demos that simply can't run on ESP32-HUB75-MatrixPanel-DMA without this framebuffer driver:
 https://www.youtube.com/watch?v=1d6U-6twpCk
+<img width="1134" height="769" alt="image" src="https://github.com/user-attachments/assets/c54aeab8-d9fd-4c9c-8e2e-fb816df0eec1" />
+
 
 Installation
 ------------
