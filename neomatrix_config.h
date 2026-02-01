@@ -118,7 +118,7 @@ to use, set the define before you include the file.
 	#pragma message "Detected ARDUINOONPC on pre-rPi3, RPIRGBPANEL defined and will use FastLED_RPIRGBPanel_GFX"
     #else
 	#ifndef LINUX_RENDERER_SDL
-	    #pragma message "Detected ARDUINOONPC. Using LINUX_RENDERER_X11 Rendering via FastLED_ArduinoGFX_TFT. >>> This is Slow, are you sure yo udon't want LINUX_RENDERER_SDL? <<< "
+	    #pragma message "Detected ARDUINOONPC. Using LINUX_RENDERER_X11 Rendering via FastLED_ArduinoGFX_TFT. >>> This is Slow, are you sure you don't want LINUX_RENDERER_SDL? <<< "
 	    #define LINUX_RENDERER_X11
 	#else
 
@@ -1630,6 +1630,10 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.led_rgb_sequence = "RGB";
     	    defaults.pixel_mapper_config = "V-mapper";
     	    defaults.multiplexing = 4;
+            // default debug value, take it down to less to remove flickering if needed
+            // https://github.com/hzeller/rpi-rgb-led-matrix/issues/483
+            // https://github.com/ProjectCodeKw/rpi-rgb-led-matrix/commit/e4405f90e0842e54970601b03386ac68c283d377
+            defaults.limit_refresh_rate_hz = 500;
         #elif GFXDISPLAY_M192BY160
             defaults.rows = 32;
             defaults.cols = 64;
@@ -1743,7 +1747,8 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
 	    // or 520Hz with lsb_ns at 50 not 100
 	    // but things are 1/3rd as bright so
 	    // we go back to 0 for 333Hz with 50ns
-            defaults.pwm_dither_bits = 1;
+            // 1 is faster, but seem too dim, let's do 0
+            defaults.pwm_dither_bits = 0;
             //defaults.led_rgb_sequence = "RBG";
             defaults.pixel_mapper_config = "V-mapper";
         #elif GFXDISPLAY_M128BY192_4_3
@@ -1818,6 +1823,10 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.led_rgb_sequence = "RBG";
             defaults.panel_type = "FM6126A";
         #endif
+        // default debug value, take it down to less to remove flickering if needed
+        // https://github.com/hzeller/rpi-rgb-led-matrix/issues/483
+        // https://github.com/ProjectCodeKw/rpi-rgb-led-matrix/commit/e4405f90e0842e54970601b03386ac68c283d377
+        // defaults.limit_refresh_rate_hz = 200;
 
         rgb_matrix::RuntimeOptions ropt;
 	// Patterns full of white can cause screen wide flashes
