@@ -6,7 +6,7 @@
 //#define MIXIT_AFTER_FIRST_PASS
 
 // write the pattern number in upper left (makes more sense on higher res displays)
-#define SHOW_PATTERN_NUM
+//#define SHOW_PATTERN_NUM
 //
 // Display FPS computed by Framebuffer::GFX
 //#define DISPLAY_FPS

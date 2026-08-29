@@ -633,7 +633,7 @@ uint32_t tft_spi_speed;
     #endif
     CRGB *matrixleds = nullptr;
 
-    // Neither matrixleds point to anything useful yet because on ESP32 not as much
+    // matrixleds doesn't point to anything useful yet because on ESP32 not as much
     // RAM is available as static array allocation in global space, as RAM you can
     // get via malloc in setup (or even ps_malloc to use PSRAM as needed).
     // So we'll call Framebuffer_GFX->newLedsPtr and setvirtdisp to set those pointers correctly
