@@ -8787,7 +8787,7 @@ void snow() {
   {
     flop[3] = !flop[3];
     solidblack();
-    howmany = BIGGER * 1.5; //how many dots,
+    howmany = MATRIX_HEIGHT; // how much snow falls, not to omuch or it will fill up the screen
     for (int i = 0; i < howmany; i++)
     {
       xslope[i] = i; //starting x location
@@ -8797,20 +8797,20 @@ void snow() {
       else
         fcolor[i] = h;
       fvelo[i] = random8();
-      zeds(xslope[i], yslope[i]) = CHSV(fcolor[i], fvelo[i] / 4 + 192, 255);
+      zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CHSV(fcolor[i], fvelo[i] / 4 + 192, 255);
       if (i % 7 == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::White;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::White;
       if (i % MIDLX == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::Blue;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::Blue;
       if (i % 67 == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::Aqua;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::Aqua;
     }
   }
 
   for (int i = 0 ; i < howmany; i++)
   {
     //test to see if anything below, if thre is, make a new one, if not move down.
-    if ((zeds(xslope[i], yslope[i] + 1).red > 0 || zeds(xslope[i], yslope[i] + 1).green > 0 || zeds(xslope[i], yslope[i] + 1).blue > 0) && yslope[i] > 0)
+    if ((zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i] - 1).red > 0 || zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i] - 1).green > 0 || zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i] - 1).blue > 0) && yslope[i] > 0)
     {
 
       xslope[i] = random(MATRIX_WIDTH); //starting x location
@@ -8820,24 +8820,24 @@ void snow() {
         fcolor[i] = ccc;
       else
         fcolor[i] = h;
-      zeds(xslope[i], yslope[i]) = CHSV(fcolor[i], fvelo[i] / 4 + 192, 255);
+      zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CHSV(fcolor[i], fvelo[i] / 4 + 192, 255);
       if (i % 7 == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::White;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::White;
       if (i % MIDLX == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::Blue;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::Blue;
       if (i % 67 == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::Teal;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::Teal;
     }
     else {
-      zeds(xslope[i] , yslope[i]) = CRGB::Black;
+      zeds(xslope[i] , MATRIX_HEIGHT-1-yslope[i]) = CRGB::Black;
       yslope[i]++;
-      zeds(xslope[i] , yslope[i]) = CHSV(fcolor[i], fvelo[i] / 4 + 192, 255);
+      zeds(xslope[i] , MATRIX_HEIGHT-1-yslope[i]) = CHSV(fcolor[i], fvelo[i] / 4 + 192, 255);
       if (i % 7 == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::White;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::White;
       if (i % MIDLX == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::Blue;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::Blue;
       if (i % 67 == 0 && flop[3])
-        zeds(xslope[i], yslope[i]) = CRGB::Teal;
+        zeds(xslope[i], MATRIX_HEIGHT-1-yslope[i]) = CRGB::Teal;
     }
   }
 }
@@ -9434,11 +9434,11 @@ void fire2() {
   for (int i = 0; i < MATRIX_WIDTH; i++)
     for (int j = 0; j < MATRIX_HEIGHT; j++)
       //zeds(MATRIX_WIDTH - 1 - i, MATRIX_HEIGHT - 1 - j) = ColorFromPalette (thepal, qsub8 (inoise8 (i * 50 , j * 50 + ace , ace / 3), abs8(j - (MATRIX_HEIGHT - 1)) * 255 / (MATRIX_HEIGHT - 1)), 255);
-      zeds(i, j) = ColorFromPalette (thepal, qsub8 (inoise8 (i * 50 , j * 50 + ace , ace / 3), abs8(j - (MATRIX_HEIGHT - 1)) * 255 / (MATRIX_HEIGHT - 1)), 255);
+      zeds(i, MATRIX_HEIGHT - 1 - j) = ColorFromPalette (thepal, qsub8 (inoise8 (i * 50 , j * 50 + ace , ace / 3), abs8(j - (MATRIX_HEIGHT - 1)) * 255 / (MATRIX_HEIGHT - 1)), 255);
   if (MATRIX_HEIGHT > 128)
     for (int i = 0; i < MATRIX_WIDTH; i++) {
 
-      zeds(i, 31) = zeds(i, 32);
+      zeds(i, MATRIX_HEIGHT - 1 - 31) = zeds(i, MATRIX_HEIGHT - 1 - 32);
 
     }
   if (flop[2] && flop[4]) {
