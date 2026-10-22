@@ -600,6 +600,13 @@ uint32_t tft_spi_speed;
         #error "please define pins for new ESP32_HUB75_MATRIXPANEL mapping"
     #endif
 
+    // Step 5, how do you adjust RGB LED order for weird panels?
+    // the underlying library does not have an option for this, but you can just
+    // swap the pin numbers above for 2 colors and it'll do the same thing.
+    // Unfortunately color order can be different across different panels on the
+    // same hardware, so you may have to use multiple definitions like ESP32_HUB75_MATRIXPANEL_S3_MAPPING2
+    // to support other color orders.
+
     // Below is common code for all ESP32_HUB75_MatrixPanel mappings, you shoulnd't have to edit it
     #ifdef LEDMATRIX
     // Please use https://github.com/marcmerlin/LEDMatrix/ at least as recent as

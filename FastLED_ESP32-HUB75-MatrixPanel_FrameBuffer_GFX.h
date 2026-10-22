@@ -1,3 +1,4 @@
+
 /*--------------------------------------------------------------------
   Arduino library based on Adafruit_Neomatrix
   by Marc MERLIN <marc_soft@merlins.org>
@@ -22,6 +23,9 @@
 #define _FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX_H_
 #include "Framebuffer_GFX.h"
 #include "FastLED.h"
+
+// see https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/issues/891
+#define NEW_MATRIXPANEL_API 
 #include "ESP32-VirtualMatrixPanel-I2S-DMA.h"
 
 class FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX : public Framebuffer_GFX {
