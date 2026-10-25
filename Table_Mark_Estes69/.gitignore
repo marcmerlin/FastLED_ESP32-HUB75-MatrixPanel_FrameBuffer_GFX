@@ -1,1 +1,5 @@
+# this does not work
 neomatrix_config_whichdefine.h
+
+# so instead, run git update-index --skip-worktree neomatrix_config_whichdefine.h
+
