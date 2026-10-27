@@ -59,9 +59,11 @@ to use, set the define before you include the file.
 // Are all those defines confusing? Then look at neomatrix_config_tftonly.h with all the defines
 // taken out and a single backend hardcoded.
 // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// Yes, you can simply define the backend you want here, or before you include this file
 //#define M24BY24
 
-// Let's allow a custom include here that can contain a single line like
+// But let's allow a custom include here that can contain a single line like
 // #define ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64
 #if __has_include("neomatrix_config_whichdefine.h")
     #include "neomatrix_config_whichdefine.h"
@@ -83,7 +85,6 @@ to use, set the define before you include the file.
 	    #pragma message "Detected ARDUINOONPC. Using LINUX_RENDERER_X11 Rendering via FastLED_ArduinoGFX_TFT. >>> This is Slow, are you sure you don't want LINUX_RENDERER_SDL? <<< "
 	    #define LINUX_RENDERER_X11
 	#else
-
             // Should be defined in ArduinoOnPc-FastLED-GFX-LEDMatrix/examples/Makefile
             #ifndef LINUX_RENDERER_SDL_SCALE
                 #define LINUX_RENDERER_SDL_SCALE 4
@@ -247,6 +248,16 @@ uint32_t tft_spi_speed;
        #pragma message "M128BY128ABC read from /root/NM/gfxdisplay"
        const uint16_t MATRIX_TILE_WIDTH = 128;
        const uint16_t MATRIX_TILE_HEIGHT= 128;
+   // 2 panels with magnets on metal frame, shift register line addressing
+   #elif GFXDISPLAY_128BY128ABC_PWM6373_SR1
+       #pragma message "128BY128ABC_PWM6373_SR1 read from /root/NM/gfxdisplay"
+       const uint16_t MATRIX_TILE_WIDTH = 128;
+       const uint16_t MATRIX_TILE_HEIGHT= 128;
+   // Pre-made square plastic array, direct line addressing
+   #elif GFXDISPLAY_128BY128ABC_PWM6373
+       #pragma message "128BY128ABC_PWM6373 read from /root/NM/gfxdisplay"
+       const uint16_t MATRIX_TILE_WIDTH = 128;
+       const uint16_t MATRIX_TILE_HEIGHT= 128;
    #elif GFXDISPLAY_M192BY128_4_3_Umap_Rot
        #pragma message "M192BY128_4_3_Umap_Rot read from /root/NM/gfxdisplay"
        const uint16_t MATRIX_TILE_WIDTH = 192;
@@ -259,6 +270,18 @@ uint32_t tft_spi_speed;
        #pragma message "M128BY192ABC read from /root/NM/gfxdisplay"
        const uint16_t MATRIX_TILE_WIDTH = 128;
        const uint16_t MATRIX_TILE_HEIGHT= 192;
+   #elif GFXDISPLAY_M128BY192ABCPWM
+       #pragma message "M128BY192ABCPWM read from /root/NM/gfxdisplay"
+       const uint16_t MATRIX_TILE_WIDTH = 128;
+       const uint16_t MATRIX_TILE_HEIGHT= 192;
+   #elif GFXDISPLAY_M288BY192_9_3_Zmap_Rot
+       #pragma message "M288BY192_9_3_Zmap_Rot read from /root/NM/gfxdisplay"
+       const uint16_t MATRIX_TILE_WIDTH = 288;
+       const uint16_t MATRIX_TILE_HEIGHT= 192;
+   #elif GFXDISPLAY_M288BY192_9_3_Zmap
+       #pragma message "M288BY192_9_3_Zmap read from /root/NM/gfxdisplay"
+       const uint16_t MATRIX_TILE_WIDTH = 192;
+       const uint16_t MATRIX_TILE_HEIGHT= 288;
    #elif GFXDISPLAY_M128BY192_4_3_Zmap
        #pragma message "M128BY192_4_3_Zmap read from /root/NM/gfxdisplay"
        const uint16_t MATRIX_TILE_WIDTH = 128;
@@ -291,6 +314,10 @@ uint32_t tft_spi_speed;
        #pragma message "M288BY192_9_3_Zmap read from /root/NM/gfxdisplay"
        const uint16_t MATRIX_TILE_WIDTH = 192;
        const uint16_t MATRIX_TILE_HEIGHT= 288;
+   #elif GFXDISPLAY_M350BY12
+       #pragma message "M350BY12 read from /root/NM/gfxdisplay"
+       const uint16_t MATRIX_TILE_WIDTH = 350;
+       const uint16_t MATRIX_TILE_HEIGHT= 12;
    #else
        #pragma message "Please write M384BY256 or equivalent to /root/NM/gfxdisplay (see ../../makeNativeArduino.mk)"
        const uint16_t MATRIX_TILE_WIDTH = 320;
@@ -1260,7 +1287,7 @@ void show_callback() {
 
 //============================================================================
 #else
-    #error "Please write a matrix config or choose one of the definitions above. If you have a FastLED matrix, define something like M24BY24 at the top of this file"
+    #error "Please write a matrix config or choose one of the definitions above. If you have a FastLED matrix, define something like M24BY24 at the top of this file. Or put your define in neomatrix_config_whichdefine.h"
 #endif
 
 //============================================================================
@@ -1604,7 +1631,10 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
         Serial.println("Using rpi-rgb-led-matrix");
 
         rgb_matrix::RGBMatrix::Options defaults;
+        rgb_matrix::RuntimeOptions ropt;
         defaults.hardware_mapping = "regular"; // or e.g. "adafruit-hat"
+	// start with null, override per display or chip
+        ropt.gpio_slowdown = 0;
         #ifdef GFXDISPLAY_M384BY256
             defaults.rows = 64;
             defaults.cols = 128;
@@ -1669,6 +1699,7 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.pwm_dither_bits = 1;
             //defaults.led_rgb_sequence = "RBG";
             defaults.pixel_mapper_config = "U-mapper;Rotate:90";
+            ropt.gpio_slowdown = 2;
         #elif GFXDISPLAY_M128BY128ABC
             defaults.rows = 64;
             defaults.cols = 128;
@@ -1685,6 +1716,31 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.led_rgb_sequence = "RBG";
             defaults.panel_type = "FM6126A";
 	    defaults.row_address_type = 5;
+            ropt.gpio_slowdown = 4;
+        #elif GFXDISPLAY_128BY128ABC_PWM6373_SR1
+	    #define PWM_PANEL
+            defaults.rows = 64;
+            defaults.cols = 128;
+            defaults.chain_length = 1;
+            defaults.parallel = 2;
+            defaults.pwm_lsb_nanoseconds = 50;
+            defaults.led_rgb_sequence = "RGB";
+	    defaults.spwm_row_address_type = 1;
+	    defaults.spwm_register_config = 31;
+            defaults.panel_type = "FM6373";
+	    ropt.gpio_slowdown = 3;
+        #elif GFXDISPLAY_128BY128ABC_PWM6373
+	    #define PWM_PANEL
+            defaults.rows = 64;
+            defaults.cols = 128;
+            defaults.chain_length = 1;
+            defaults.parallel = 2;
+            defaults.pwm_lsb_nanoseconds = 50;
+            defaults.led_rgb_sequence = "RGB";
+	    defaults.spwm_row_address_type = 0;
+	    defaults.spwm_register_config = 31;
+            defaults.panel_type = "FM6373";
+	    ropt.gpio_slowdown = 4;
         #elif GFXDISPLAY_M128BY192
             defaults.rows = 64;
             defaults.cols = 128;
@@ -1712,6 +1768,20 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.led_rgb_sequence = "RGB";
             defaults.panel_type = "FM6126A";
 	    defaults.row_address_type = 5;
+            ropt.gpio_slowdown = 2;
+            #if RPI02W
+                ropt.gpio_slowdown = 3;
+            #endif
+        #elif GFXDISPLAY_M128BY192ABCPWM
+	    #define PWM_PANEL
+            defaults.rows = 64;
+            defaults.cols = 128;
+            defaults.chain_length = 1;
+            defaults.parallel = 3;
+	    defaults.spwm_row_address_type = 1;
+	    defaults.spwm_register_config = 18; // or 10
+            defaults.panel_type = "sm16380sh";
+	    ropt.gpio_slowdown = 3;
         #elif GFXDISPLAY_M128BY192_4_3_Zmap
             defaults.rows = 32;
             defaults.cols = 64;
@@ -1742,6 +1812,8 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.pwm_dither_bits = 1;
             //defaults.led_rgb_sequence = "RBG";
             defaults.pixel_mapper_config = "V-mapper;Rotate:90";
+            // not used, just here for demo
+            ropt.gpio_slowdown = 8;
         #elif GFXDISPLAY_M128BY208_13_2_Vmap
             defaults.rows = 16;
             defaults.cols = 64;
@@ -1758,6 +1830,9 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.pwm_dither_bits = 0;
             //defaults.led_rgb_sequence = "RBG";
             defaults.pixel_mapper_config = "V-mapper";
+	    // Patterns full of white can cause screen wide flashes
+	    // with slowdown 5 due to clock/data de-sync
+            ropt.gpio_slowdown = 6;
         #elif GFXDISPLAY_M128BY192_4_3
             defaults.rows = 32;
             defaults.cols = 64;
@@ -1788,6 +1863,8 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
             defaults.pwm_dither_bits = 1;
             //defaults.led_rgb_sequence = "RBG";
             defaults.pixel_mapper_config = "V-mapper:Z";
+            // cube works at 2, but real code needs 3
+            ropt.gpio_slowdown = 3;
         #elif GFXDISPLAY_M288BY192_9_3_Zmap_Rot
             defaults.rows = 32;
             defaults.cols = 64;
@@ -1835,41 +1912,30 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
         // https://github.com/ProjectCodeKw/rpi-rgb-led-matrix/commit/e4405f90e0842e54970601b03386ac68c283d377
         // defaults.limit_refresh_rate_hz = 200;
 
-        rgb_matrix::RuntimeOptions ropt;
-	// Patterns full of white can cause screen wide flashes
-	// with slowdown 5 due to clock/data de-sync
-	#if GFXDISPLAY_M128BY208_13_2_Vmap
-	    ropt.gpio_slowdown = 6;
-	#elif GFXDISPLAY_M208BY128_13_2_Vmap_Rot
-	    // not used, just here for demo
-	    ropt.gpio_slowdown = 8;
-	#elif GFXDISPLAY_M192BY256_8_3_Zmap
-	    // cube works at 2, but real code needs 3
-	    ropt.gpio_slowdown = 3;
-	#elif GFXDISPLAY_M128BY128ABC
-	    ropt.gpio_slowdown = 4;
-	#elif GFXDISPLAY_M192BY128_4_3_Umap_Rot 
-	    ropt.gpio_slowdown = 2;
-	#elif GFXDISPLAY_M128BY192ABC
-	    ropt.gpio_slowdown = 2;
-	    #if RPI02W
-		ropt.gpio_slowdown = 3;
-	    #endif
-	#elif RPI4
-	    ropt.gpio_slowdown = 4;
-	#elif RPI02W
-	    ropt.gpio_slowdown = 2;
-	#else
-	    ropt.gpio_slowdown = 1;
-	#endif
+        if (!ropt.gpio_slowdown) {
+        #if RPI4
+            ropt.gpio_slowdown = 4;
+        #elif RPI02W
+            ropt.gpio_slowdown = 2;
+        #else
+            ropt.gpio_slowdown = 1;
+        #endif
+	}
 	// stay root (useful for accessing /dev/ttyUSB0 and others)
 	ropt.drop_privileges = -1;
 
+        Serial.printf("\n>>>> Panel Addressing: %d and slowdown %d <<<<\n", defaults.row_address_type, ropt.gpio_slowdown);
+	#ifdef PWM_PANEL
+	    Serial.printf(">>>> SPwM Type: %s, SPWM Row: %d and register config: %d <<<<\n\n", defaults.panel_type, defaults.spwm_row_address_type, defaults.spwm_register_config);
+	    if (defaults.spwm_row_address_type > 0) Serial.println("If init fails, make sure you export SPWM_PROFILE_DIR=/root/rpi-rgb-led-matrix_pwm_experiment/lib/spwm/registertest/data/ or something equivalent");
+	#else
+	    Serial.println("");
+	#endif
+
         RGBMatrix *rgbmatrix = rgb_matrix::CreateMatrixFromOptions(defaults, ropt);
-        while (rgbmatrix == NULL) Serial.println("RGBMatrix did not initialize");
+        while (rgbmatrix == NULL) { Serial.println("RGBMatrix did not initialize"); delay (1000); }
         matrix->setMatrix(rgbmatrix);
         Serial.println("RGBPanel RGBMatrix initialized");
-        Serial.printf("\n>>>> Panel Addressing: %d and slowdown %d <<<<\n\n", defaults.row_address_type, ropt.gpio_slowdown);
 
     //============================================================================================
     #elif defined(M5STACK)
