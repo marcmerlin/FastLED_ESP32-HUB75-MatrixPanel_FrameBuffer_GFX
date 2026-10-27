@@ -1,0 +1,5 @@
+//#define WIFI_HOSTNAME "ChangeMe"
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+#define WIFI_AP_SSID ""
+#define WIFI_AP_PASSWORD ""
