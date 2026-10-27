@@ -2,6 +2,18 @@
 // Enable LEDMATRIX support in neomatrix_config
 #define LEDMATRIX
 
+// create this file with
+// #define WIFI_SSID "foo"
+// #define WIFI_PASSWORD "bar"
+// #define WIFI_HOSTNAME screen1
+#if __has_include("wifi_secrets.h")
+    #include "wifi_secrets.h"
+    #ifndef WIFI_HOSTNAME 
+        #define WIFI_HOSTNAME "TME69-changeme"
+    #endif
+    #include "wifi_serial_ota.h"
+#endif
+
 #include "neomatrix_config.h"
 #define zeds ledmatrix
 
@@ -170,8 +182,12 @@ void setup()
   z = random16();
   if (MATRIX_WIDTH == MATRIX_HEIGHT)
     square = true;
-  delay(1500);
-  Serial.begin(57600);
+  //delay(1500);
+  #ifdef WIFI_HOSTNAME
+    wifi_setup();
+  #else
+    Serial.begin(115200);
+  #endif
 #ifdef TME_AUDIO
 
   Serial1.begin(57600);
@@ -250,6 +266,8 @@ void setup()
 
 void loop()
 {
+  wifi_loop();
+
   hue += 1;//increment the color basis
   h = hue;  //set h to the color basis
   checkshifty();

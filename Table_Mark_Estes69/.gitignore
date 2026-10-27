@@ -1,5 +1,6 @@
 # this does not work
 neomatrix_config_whichdefine.h
-
 # so instead, run git update-index --skip-worktree neomatrix_config_whichdefine.h
 
+# this should be a symlink to a checked in file, or contain local data
+neomatrix_config_whichdefine.h
