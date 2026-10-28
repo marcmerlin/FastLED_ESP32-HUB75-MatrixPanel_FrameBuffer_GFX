@@ -1,3 +1,36 @@
+#ifndef WIFI_SERIAL_OTA_H
+#define WIFI_SERIAL_OTA_H
+
+#if 0
+How do you find your device after it boots?
+
+sauron:~# avahi-browse -rt _arduino._tcp
++  wlan0 IPv4 P1.825-64BY64                                 _arduino._tcp        local
++  wlan0 IPv4 Marc NFL-3                                    _arduino._tcp        local
++  wlan0 IPv4 P4-64BY32X2                                   _arduino._tcp        local
++  wlan0 IPv4 Marc NFL                                      _arduino._tcp        local
+=  wlan0 IPv4 P1.825-64BY64                                 _arduino._tcp        local
+   hostname = [P1\.825-64BY64.local]
+   address = [192.168.205.187]
+   port = [3232]
+   txt = ["board=adafruit_matrixportal_esp32s3" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+=  wlan0 IPv4 Marc NFL-3                                    _arduino._tcp        local
+   hostname = [Marc\032NFL-3.local]
+   address = [192.168.205.194]
+   port = [3232]
+   txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+=  wlan0 IPv4 P4-64BY32X2                                   _arduino._tcp        local
+   hostname = [P4-64BY32X2.local]
+   address = [192.168.205.203]
+   port = [3232]
+   txt = ["board=adafruit_matrixportal_esp32s3" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+=  wlan0 IPv4 Marc NFL                                      _arduino._tcp        local
+   hostname = [Marc\032NFL.local]
+   address = [192.168.205.218]
+   port = [3232]
+   txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+#endif
+
 #include "wifi_secrets.h"
 #include <WiFi.h>
 #include <WiFiMulti.h>
@@ -7,6 +40,10 @@
 // Also define WIFI_SSID and WIFI_PASSWORD before you include
 #ifndef WIFI_HOSTNAME
 #define WIFI_HOSTNAME "CHANGEME WIFI_HOSTNAME"
+#endif
+
+#ifndef WIFI_OTA_PWD
+#define WIFI_OTA_PWD` "CHANGEME"
 #endif
 
 #ifndef TELNET_PORT
@@ -181,7 +218,7 @@ void wifi_setup() {
 
   // Wi-Fi Event Callbacks
   WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
-    Serial.printf("\n[WiFi] Connected! IP: %s | Hostname: %s.local | Telnet ready port %d\n", 
+    Serial.printf("\n[WiFi] Connected! IP: %s | Hostname: %s.local | Telnet ready port %d (use nc, not telnet)\n", 
                   WiFi.localIP().toString().c_str(), 
                   WIFI_HOSTNAME, TELNET_PORT);
   }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
@@ -198,6 +235,8 @@ void wifi_setup() {
 
   Serial.println("Setup ArduinoOTA. Remote Wifi Updates Supported!");
   ArduinoOTA.setHostname(WIFI_HOSTNAME);
+  ArduinoOTA.setPassword(WIFI_OTA_PWD);
   ArduinoOTA.begin();
   Serial.println("OTA Ready");
 }
+#endif
