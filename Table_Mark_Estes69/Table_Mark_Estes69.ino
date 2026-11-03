@@ -34,6 +34,8 @@
   #endif
 */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 // Aurora includes
 #include "matrix.h"
 #include "Effects.h"
@@ -48,7 +50,6 @@ PatternBounce bounce;
 #include "PatternCube.h"
 PatternCube cube;
 #include "PatternFlock.h"
-
 PatternFlock aflock;
 #include "PatternFlowField.h"
 PatternFlowField flowfield;
@@ -68,6 +69,8 @@ PatternSpiro spiro;
 PatternSwirl swirl;
 #include "PatternWave.h"
 PatternWave wave;
+#pragma GCC diagnostic pop
+
 
 AuroraDrawable* items[] = {
   &attract,//0
