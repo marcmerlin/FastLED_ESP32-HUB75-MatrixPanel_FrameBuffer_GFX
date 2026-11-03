@@ -20,9 +20,7 @@
 #include "Table_Mark_Estes_config.h"
 
 //#define SHOW_PATTERN_NUM uses Adafruit GFX fonts
-#ifdef SHOW_PATTERN_NUM
 #include <Fonts/TomThumb.h>
-#endif
 
 // TME now uses LEDText from LEDMatrix (a competing library)
 #include <LEDText.h>
@@ -170,7 +168,47 @@ uint8_t print_width = 3;
 
 #include "Table_Mark_Estes_Impl.h"
 
-void on_ota_start();
+#ifdef WIFI_HOSTNAME
+
+void on_ota_start() {
+    Serial.println("\r\nGot OTA - Executing Matrix Shutdown Callback");
+    
+    // 1. MUST blank the screen first to prevent LED burn-in!
+    matrix->fillScreen(0);
+    matrix->setFont(&TomThumb);
+    matrix->setCursor(1, 6);
+    matrix->print("Received OTA\nFlashing...");
+    matrix->show(); 
+    
+    delay(1000);
+
+    matrix->fillScreen(0);
+    matrix->show(); 
+
+    // 2. Allow one full frame to clock out to the hardware
+    delay(50);
+    
+    // 2. Shut down the I2S DMA engine to free the memory bus for the SPI flash
+    if (hub75matrix) {
+        hub75matrix->stopDMAoutput();
+    }
+}
+
+volatile uint32_t pause_until_millis = 0;
+
+void on_wifi_connect() {
+    Serial.println("\r\nWifi Callback");
+    
+    // stop the main thread for 4 seconds
+    pause_until_millis = millis() + 4000;
+    matrix->fillRect(0, 0, 64, 14, 0);
+    matrix->setFont(&TomThumb);
+    matrix->setCursor(1, 6);
+    matrix->print(String(">") + WiFi.localIP().toString().c_str() + "<");
+    matrix->show(); 
+}
+#endif
+
 void setup()
 {
 #if 0
@@ -188,7 +226,7 @@ void setup()
     square = true;
   //delay(1500);
   #ifdef WIFI_HOSTNAME
-    wifi_setup(on_ota_start);
+    wifi_setup(on_ota_start, on_wifi_connect);
   #else
     Serial.begin(115200);
   #endif
@@ -267,39 +305,25 @@ void setup()
   matrix->setfpsfreq(0);
 #endif
 
+  matrix->setFont(&TomThumb);
   matrix->setCursor(1, 6);
   // This is useful to show which way is up :)
-  matrix->print("TME 69\nDemo");
+  matrix->println("TME 69 Demo");
+#ifdef WIFI_HOSTNAME
+  matrix->println(WIFI_HOSTNAME);
+#endif
   matrix->show(); 
-  delay(1000);
+  delay(3000);
 }
 
-
-void on_ota_start() {
-    Serial.println("Got OTA - Executing Matrix Shutdown Callback");
-    
-    // 1. MUST blank the screen first to prevent LED burn-in!
-    matrix->fillScreen(0);
-    matrix->setCursor(1, 6);
-    matrix->print("Received\nOTA,\nflashing..");
-    matrix->show(); 
-    
-    delay(2000);
-
-    matrix->fillScreen(0);
-    matrix->show(); 
-
-    // 2. Allow one full frame to clock out to the hardware
-    delay(50);
-    
-    // 2. Shut down the I2S DMA engine to free the memory bus for the SPI flash
-    if (hub75matrix) {
-        hub75matrix->stopDMAoutput();
-    }
-}
 
 void loop()
 {
+  if (millis() < pause_until_millis) {
+    delay(100);
+    EVERY_N_SECONDS(1) Serial.println("Pausing main loop to show other thread output");
+    return;
+  }
   wifi_loop();
 
   hue += 1;//increment the color basis

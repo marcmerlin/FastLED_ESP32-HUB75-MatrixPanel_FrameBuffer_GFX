@@ -206,6 +206,11 @@ GenericSerialSplitter<decltype(Serial)> Splitter(Serial, TELNET_PORT);
 #undef Serial
 #define Serial Splitter
 
+
+// ###########################################################################################
+// End of Serial hijack, WIFI start
+// ###########################################################################################
+
 volatile bool ota_in_progress = false;
 
 void wifi_loop() {
@@ -215,20 +220,30 @@ void wifi_loop() {
   Splitter.handle();
 }
 
-void wifi_setup(void (*ota_start_callback)() = nullptr) {
+// we need a callback because it calls the matrix we can't access here
+void wifi_setup(void (*ota_start_callback)() = nullptr, void (*ota_wifi_connect_callback)() = nullptr) {
   Serial.begin(115200);
   //while (!Serial) {}
   Serial.println("Start");
 
   // Wi-Fi Event Callbacks
-  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+  WiFi.onEvent([ota_wifi_connect_callback](WiFiEvent_t event, WiFiEventInfo_t info) {
     Serial.printf("\n[WiFi] Connected! IP: %s | Hostname: %s.local | Telnet ready port %d (use nc, not telnet)\n", 
                   WiFi.localIP().toString().c_str(), 
                   WIFI_HOSTNAME, TELNET_PORT);
+		  ota_wifi_connect_callback();
   }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
   WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
-    Serial.printf("\n[WiFi] Disconnected. Reason: %d\n", info.wifi_sta_disconnected.reason);
+    uint8_t reason = info.wifi_sta_disconnected.reason;
+    Serial.printf("\n[WiFi] Disconnected. Reason: %d\n", reason);
+    
+    // Force a reconnect if the driver gives up (e.g., AUTH_FAIL or NO_AP_FOUND)
+    if (reason == 202 || reason == 201 || reason == 4) {
+        Serial.println("[WiFi] Forcing manual reconnect...");
+        // Use WiFi.begin rather than WiFi.reconnect() to fully reset the station state
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    }
   }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
   Serial.print("Wifi: ");
