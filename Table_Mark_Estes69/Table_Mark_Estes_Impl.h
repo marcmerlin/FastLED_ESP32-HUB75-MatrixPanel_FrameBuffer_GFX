@@ -232,6 +232,10 @@ void newpattern()//generates all the randomness for each new pattern
     }
   }
 
+  if (readchar == 'r') {
+    Serial.println("Serial => reboot");
+    rebootESP32();
+  }
   if (readchar == 'n') {
     local_pattern++;
     Serial.println("Serial => next");

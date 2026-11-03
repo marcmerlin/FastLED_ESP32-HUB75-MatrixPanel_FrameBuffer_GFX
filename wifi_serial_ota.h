@@ -206,12 +206,16 @@ GenericSerialSplitter<decltype(Serial)> Splitter(Serial, TELNET_PORT);
 #undef Serial
 #define Serial Splitter
 
+volatile bool ota_in_progress = false;
+
 void wifi_loop() {
   ArduinoOTA.handle();
+  if (ota_in_progress) return;
+
   Splitter.handle();
 }
 
-void wifi_setup() {
+void wifi_setup(void (*ota_start_callback)() = nullptr) {
   Serial.begin(115200);
   //while (!Serial) {}
   Serial.println("Start");
@@ -233,10 +237,39 @@ void wifi_setup() {
   // I think this is default now?
   WiFi.setAutoReconnect(true);
 
+  ArduinoOTA.onStart([ota_start_callback]() {
+    Serial.println("\r\n[OTA] Update started. Freeing network resources and locking loop.");
+    ota_in_progress = true;
+    
+    // 1. Disable Wi-Fi sleep to prevent TCP dropped packets during flash erase CPU stalls
+    WiFi.setSleep(false);
+    
+    // 2. Kill the Telnet server and all clients to free LwIP TCP memory buffers
+    // But let's not doo that, it's nice to be able to watch the OTA being received over serial
+    //Splitter.restart();
+
+    // Execute the injected matrix code from the main file
+    if (ota_start_callback) ota_start_callback();
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+      Serial.printf("[OTA] Error[%u] - Transfer failed. Releasing loop lock.\r\n", error);
+      ota_in_progress = false; 
+      //WiFi.setSleep(true); // Restore default Wi-Fi power save
+  });
+
+  ArduinoOTA.onEnd([]() {
+      Serial.println("\r\n[OTA] Transfer Complete.");
+      ota_in_progress = false;
+  });
+
   Serial.println("Setup ArduinoOTA. Remote Wifi Updates Supported!");
   ArduinoOTA.setHostname(WIFI_HOSTNAME);
   ArduinoOTA.setPassword(WIFI_OTA_PWD);
   ArduinoOTA.begin();
-  Serial.println("OTA Ready");
+  Serial.printf(">>>>>>>>>>>>>>>>>> OTA Ready (%s/%s)\n", WIFI_HOSTNAME, WIFI_OTA_PWD);
 }
-#endif
+
+void(* rebootESP32) (void) = 0; // jump to 0 to cause a sofware reboot
+
+#endif // WIFI_SERIAL_OTA_H

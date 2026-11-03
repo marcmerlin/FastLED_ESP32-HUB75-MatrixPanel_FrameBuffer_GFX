@@ -167,6 +167,7 @@ uint8_t print_width = 3;
 
 #include "Table_Mark_Estes_Impl.h"
 
+void on_ota_start();
 void setup()
 {
 #if 0
@@ -184,7 +185,7 @@ void setup()
     square = true;
   //delay(1500);
   #ifdef WIFI_HOSTNAME
-    wifi_setup();
+    wifi_setup(on_ota_start);
   #else
     Serial.begin(115200);
   #endif
@@ -262,6 +263,36 @@ void setup()
 #ifdef DISPLAY_FPS
   matrix->setfpsfreq(0);
 #endif
+
+  matrix->setCursor(1, 6);
+  // This is useful to show which way is up :)
+  matrix->print("TME 69\nDemo");
+  matrix->show(); 
+  delay(1000);
+}
+
+
+void on_ota_start() {
+    Serial.println("Got OTA - Executing Matrix Shutdown Callback");
+    
+    // 1. MUST blank the screen first to prevent LED burn-in!
+    matrix->fillScreen(0);
+    matrix->setCursor(1, 6);
+    matrix->print("Received\nOTA,\nflashing..");
+    matrix->show(); 
+    
+    delay(2000);
+
+    matrix->fillScreen(0);
+    matrix->show(); 
+
+    // 2. Allow one full frame to clock out to the hardware
+    delay(50);
+    
+    // 2. Shut down the I2S DMA engine to free the memory bus for the SPI flash
+    if (hub75matrix) {
+        hub75matrix->stopDMAoutput();
+    }
 }
 
 void loop()
