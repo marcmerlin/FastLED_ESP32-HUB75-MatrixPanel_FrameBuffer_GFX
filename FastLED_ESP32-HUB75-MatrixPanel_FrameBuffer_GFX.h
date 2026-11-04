@@ -38,6 +38,7 @@ class FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX : public Framebuffer_GFX {
     void setvirtdisp(VirtualMatrixPanel *virtualDisp) { _virtdisp = virtualDisp; }
     void sethub75matrix(MatrixPanel_I2S_DMA *hub75matrix) { _hub75matrix = hub75matrix; }
     void show();
+    // 0 to 255
     void setBrightness(uint8_t b) { _hub75matrix->setBrightness(b); };
 
   protected:
