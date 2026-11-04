@@ -16,3 +16,6 @@ First flash from arduino may not work, you need to
 5) after flash you have to push reset button again to get out of flash mode
 
 Subsequent flashes will work without those buttons
+
+And if you're a really cool kid, check out wifi_serial_ota.h and how it's used
+in Table_Mark_Estes69 to reflash remotely over Wifi.
