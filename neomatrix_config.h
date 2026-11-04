@@ -622,9 +622,9 @@ uint32_t tft_spi_speed;
         #define LAT 47
         #define OE  14
 
-        // I have bigger panels that take more power and get powered from USB-C, run at 70%
+        // I have bigger panels that take more power and get powered from USB-C, run at 50%
         // to prevent reboots.
-        uint8_t matrix_brightness = 70;
+        uint8_t matrix_brightness = 128;
     #else
         #error "please define pins for new ESP32_HUB75_MATRIXPANEL mapping"
     #endif

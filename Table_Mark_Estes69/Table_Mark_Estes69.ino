@@ -173,25 +173,26 @@ uint8_t print_width = 3;
 void on_ota_start() {
     Serial.println("\r\nGot OTA - Executing Matrix Shutdown Callback");
     
-    // 1. MUST blank the screen first to prevent LED burn-in!
     matrix->fillScreen(0);
     matrix->setFont(&TomThumb);
     matrix->setCursor(1, 6);
     matrix->print("Received OTA\nFlashing...");
     matrix->show(); 
     
+    // just long enough to show it but not long enough to stall the OTA
     delay(1000);
 
+    // 1. MUST blank the screen first to prevent LED burn-in!
     matrix->fillScreen(0);
     matrix->show(); 
 
     // 2. Allow one full frame to clock out to the hardware
     delay(50);
-    
-    // 2. Shut down the I2S DMA engine to free the memory bus for the SPI flash
-    if (hub75matrix) {
-        hub75matrix->stopDMAoutput();
-    }
+
+    // Shut down the I2S DMA engine to free the memory bus for the SPI flash
+    // Note that this is not absolutely required but flashing is super slow
+    // if the I2S DMA keeps running.
+    if (hub75matrix) hub75matrix->stopDMAoutput();
 }
 
 volatile uint32_t pause_until_millis = 0;
@@ -199,15 +200,31 @@ volatile uint32_t pause_until_millis = 0;
 void on_wifi_connect() {
     Serial.println("\r\nWifi Callback");
     
-    // stop the main thread for 4 seconds
-    pause_until_millis = millis() + 4000;
-    matrix->fillRect(0, 0, 64, 14, 0);
+    // stop the main thread for 3 seconds
+    pause_until_millis = millis() + 3000;
+    matrix->fillRect(0, 0, 64, 7, 0);
     matrix->setFont(&TomThumb);
-    matrix->setCursor(1, 6);
-    matrix->print(String(">") + WiFi.localIP().toString().c_str() + "<");
+    matrix->setCursor(0, 6);
+    matrix->print(String("> ") + WiFi.localIP().toString().c_str() + " <");
     matrix->show(); 
 }
 #endif
+
+void display_hostname() {
+  matrix->fillRect(0, 64-7*3, 64, 21, 0);
+  matrix->setFont(&TomThumb);
+  matrix->setCursor(0, 64-2*7);
+  // This is useful to show which way is up :)
+  matrix->println("TME 69 Demo");
+#ifdef WIFI_HOSTNAME
+  // This is the build time hostname, not used for anything else anymore
+  matrix->println(WIFI_HOSTNAME);
+#endif
+  matrix->println(get_hostname().c_str());
+  matrix->show(); 
+  // stop the main thread for 3 seconds
+  pause_until_millis = millis() + 3000;
+}
 
 void setup()
 {
@@ -222,8 +239,7 @@ void setup()
   x = random16();
   y = random16();
   z = random16();
-  if (MATRIX_WIDTH == MATRIX_HEIGHT)
-    square = true;
+  if (MATRIX_WIDTH == MATRIX_HEIGHT) square = true;
   //delay(1500);
   #ifdef WIFI_HOSTNAME
     wifi_setup(on_ota_start, on_wifi_connect);
@@ -251,8 +267,6 @@ void setup()
   Serial.println(scalerH);
   Serial.println(iscalerH);
 #endif
-  // don't re-init the serial port.
-  matrix_setup(false);
 
   driftx = random(3, MATRIX_WIDTH - 4);//set an initial location for the animation center
   drifty = random(3, MATRIX_HEIGHT - 4);// set an initial location for the animation center
@@ -285,16 +299,32 @@ void setup()
 
   whatami();//this prints out the current status of stuff
 
-  effects.leds = matrixleds;
-  effects.Setup();
-  matrix->show();
 #ifdef TME_AUDIO
-
   audioprocess();
 
   digitalWrite(LATCHA, LOW);
   digitalWrite(LATCHB, LOW);
 #endif
+
+
+  // don't re-init the serial port.
+  matrix_setup(false);
+  Serial.println("Adjusting Brightness, if your panels are powered by USB and things crash before you");
+  Serial.println("can reset it with b and B, unplug power to your panels to allow boot and adjustments");
+
+  uint8_t nb = get_nvram_brightness();
+  if (nb) {
+    Serial.printf("Replacing default brightness %d with NVRAM saved brightness %d\n\r", matrix_brightness, nb);
+    matrix_brightness = nb;
+    matrix->setBrightness(nb);
+  } else {
+    Serial.printf("Mo brightness saved in NVRAM, using neomatrix_config.h default of %d\n\r", matrix_brightness);
+    Serial.printf("Use 'b' to change brightness and 'B' to save to NVRAM\n\r");
+  }
+
+  effects.leds = matrixleds;
+  effects.Setup();
+  matrix->show();
 
 #ifdef SHOW_PATTERN_NUM
   // default font is 5x7, this one is 3x5
@@ -305,26 +335,20 @@ void setup()
   matrix->setfpsfreq(0);
 #endif
 
-  matrix->setFont(&TomThumb);
-  matrix->setCursor(1, 6);
-  // This is useful to show which way is up :)
-  matrix->println("TME 69 Demo");
-#ifdef WIFI_HOSTNAME
-  matrix->println(WIFI_HOSTNAME);
-#endif
-  matrix->show(); 
-  delay(3000);
+
+  display_hostname();
 }
+
 
 
 void loop()
 {
+  wifi_loop();
   if (millis() < pause_until_millis) {
     delay(100);
     EVERY_N_SECONDS(1) Serial.println("Pausing main loop to show other thread output");
     return;
   }
-  wifi_loop();
 
   hue += 1;//increment the color basis
   h = hue;  //set h to the color basis

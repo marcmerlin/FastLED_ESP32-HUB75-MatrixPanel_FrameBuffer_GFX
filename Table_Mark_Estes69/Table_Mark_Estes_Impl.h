@@ -206,6 +206,11 @@ void whitewarp();
 void spin1();
 
 
+#ifdef WIFI_HOSTNAME
+extern void display_hostname();
+extern void on_wifi_connect();
+#endif
+
 void newpattern()//generates all the randomness for each new pattern
 {
   int16_t new_pattern = 0;
@@ -236,7 +241,95 @@ void newpattern()//generates all the randomness for each new pattern
     Serial.println("Serial => reboot");
     rebootESP32();
   }
-  if (readchar == 'n') {
+  else if (readchar == 'h') {
+    Serial.println(R"(
+h => help
+r => reboot
+n => next pattern
+p => prev pattern
+b => change brightness (if powering panel from USB, too bright can crash)
+B => save brightness to NVRAM (do not save until you test it doesn't crash)
+123 => change to pattern 123
+)");
+
+#ifdef WIFI_HOSTNAME
+    Serial.println(R"(
+i => show IP
+d => display hostname
+H => set hostname in NVRAM
+)");
+#endif
+  }
+  else if (readchar == 'b') {
+    Serial.read(); // read potential newline
+    Serial.printf("Current Brightness: %d\r\n", matrix_brightness);
+    Serial.print("Input New Brightness, too high may crash (0-255): ");
+
+    uint8_t newbrightness = 0;
+    // Block efficiently until a newline arrives, building the string manually
+    while (true) {
+      if (Serial.available()) {
+        char c = Serial.read();
+        if (c < '0' || c > '9') break;
+        newbrightness = newbrightness * 10 + c - '0';
+      } else {
+	// Serial can come from wifi, so allow it to run
+	wifi_loop();
+      }
+    }
+
+    //Serial.printf("Received new brightness %s, saving in flash\r\n", newbrightness.c_str());
+    Serial.printf("Received new brightness %d, saving in flash\r\n", newbrightness);
+    matrix->setBrightness(newbrightness);
+    matrix_brightness = newbrightness;
+  }
+  else if (readchar == 'B') {
+    Serial.printf("Saving Current Brightness To Flash: %d\r\n", matrix_brightness);
+    set_nvram_brightness(matrix_brightness);
+  }
+#ifdef WIFI_HOSTNAME
+  else if (readchar == 'H') {
+    Serial.read(); // read potential newline
+    Serial.printf("Current Hostname: %s\r\n", get_hostname());
+    Serial.print("Input New Hostname: ");
+
+    String newhostname = "";
+    // Block efficiently until a newline arrives, building the string manually
+    while (true) {
+      if (Serial.available()) {
+        char c = Serial.read();
+        if (c == '\n') break; // End of input
+        if (c == '\r') break; // End of input
+	// make hostnames compliant for networking/DNS
+        if (c == ' ') c = '-';
+        if (c == '_') c = '-';
+        newhostname += c;
+      } else {
+	// Serial can come from wifi, so allow it to run
+	wifi_loop();
+      }
+    }
+
+    newhostname.trim(); // Clean up trailing '\r' if present
+    Serial.printf("Received new hostname %s, saving in flash\r\n", newhostname.c_str());
+    set_hostname(newhostname);
+    ArduinoOTA.end();
+    ArduinoOTA.setHostname(newhostname.c_str());
+    ArduinoOTA.begin();
+    display_hostname();
+  }
+  else if (readchar == 'd') {
+    Serial.println("Serial => display hostname");
+    Serial.printf("Hostname %s\n", get_hostname());
+    display_hostname();
+  }
+  else if (readchar == 'i') {
+    Serial.println("Serial => display IP");
+    Serial.printf("IP %s\n", WiFi.localIP().toString().c_str());
+    on_wifi_connect();
+  }
+#endif
+  else if (readchar == 'n') {
     local_pattern++;
     Serial.println("Serial => next");
   }

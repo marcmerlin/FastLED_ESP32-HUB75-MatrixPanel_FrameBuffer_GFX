@@ -1,6 +1,63 @@
 #ifndef WIFI_SERIAL_OTA_H
 #define WIFI_SERIAL_OTA_H
 
+#include <Preferences.h>
+
+Preferences prefs;
+
+void set_hostname(const String& new_id) {
+    prefs.begin("TME69", false); // Open namespace, false = read/write
+    
+    // Truncate to 16 chars
+    String truncated = new_id.substring(0, 16);
+    
+    // Write directly using a key. No offsets needed.
+    prefs.putString("hostname", truncated);
+    prefs.end();
+}
+
+String get_hostname() {
+    prefs.begin("TME69", true); // true = read-only
+    
+    // Read the key. If it doesn't exist, return empty string
+    String stored_id = prefs.getString("hostname", "");
+    prefs.end();
+    
+    if (stored_id.length() > 0) {
+        return stored_id;
+    }
+
+    // Fallback to eFuse MAC
+    uint64_t chip_mac = ESP.getEfuseMac();
+    char default_id[13];
+    snprintf(default_id, sizeof(default_id), "%012llX", (unsigned long long)chip_mac);
+    return String(default_id);
+}
+
+void set_nvram_brightness(const uint8_t brightness) {
+    prefs.begin("TME69", false); // Open namespace, false = read/write
+    
+    prefs.putUChar("brightness", brightness);
+    prefs.end();
+}
+
+uint8_t get_nvram_brightness() {
+    prefs.begin("TME69", true); // true = read-only
+    
+    // Read the key. The second argument (64) is the default value 
+    // returned if the key does not exist yet (e.g., first boot).
+    uint8_t brightness = prefs.getUChar("brightness", 64);
+    
+    prefs.end();
+    
+    return brightness;
+}
+
+
+// ###########################################################################################
+// End of EEPROM, Wifi/OTA Start
+// ###########################################################################################
+
 #if 0
 How do you find your device after it boots?
 
@@ -38,6 +95,8 @@ sauron:~# avahi-browse -rt _arduino._tcp
 
 // you define WIFI_HOSTNAME before doing #include "wifi_serial_ota.h"
 // Also define WIFI_SSID and WIFI_PASSWORD before you include
+// However, this is now only left in case you want to rip out EEPROM support
+// as hostname is stored in EEPROM so it can be changed at runtime on each device
 #ifndef WIFI_HOSTNAME
 #define WIFI_HOSTNAME "CHANGEME WIFI_HOSTNAME"
 #endif
@@ -230,7 +289,7 @@ void wifi_setup(void (*ota_start_callback)() = nullptr, void (*ota_wifi_connect_
   WiFi.onEvent([ota_wifi_connect_callback](WiFiEvent_t event, WiFiEventInfo_t info) {
     Serial.printf("\n[WiFi] Connected! IP: %s | Hostname: %s.local | Telnet ready port %d (use nc, not telnet)\n", 
                   WiFi.localIP().toString().c_str(), 
-                  WIFI_HOSTNAME, TELNET_PORT);
+                  get_hostname().c_str(), TELNET_PORT);
 		  ota_wifi_connect_callback();
   }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
@@ -274,16 +333,23 @@ void wifi_setup(void (*ota_start_callback)() = nullptr, void (*ota_wifi_connect_
   });
 
   ArduinoOTA.onEnd([]() {
+      // kill the telnet connection since we're about to reboot
+      Splitter.restart();
       Serial.println("\r\n[OTA] Transfer Complete.");
       ota_in_progress = false;
   });
 
   Serial.println("Setup ArduinoOTA. Remote Wifi Updates Supported!");
-  ArduinoOTA.setHostname(WIFI_HOSTNAME);
+  //ArduinoOTA.setHostname(WIFI_HOSTNAME);
+  ArduinoOTA.setHostname(get_hostname().c_str());
   ArduinoOTA.setPassword(WIFI_OTA_PWD);
   ArduinoOTA.begin();
-  Serial.printf(">>>>>>>>>>>>>>>>>> OTA Ready (%s/%s)\n", WIFI_HOSTNAME, WIFI_OTA_PWD);
+  Serial.printf(">>>>>>>>>>>>>>>>>> OTA Ready (%s/%s)\n", get_hostname().c_str(), WIFI_OTA_PWD);
 }
+
+// ###########################################################################################
+// End of WIFI
+// ###########################################################################################
 
 void(* rebootESP32) (void) = 0; // jump to 0 to cause a sofware reboot
 
