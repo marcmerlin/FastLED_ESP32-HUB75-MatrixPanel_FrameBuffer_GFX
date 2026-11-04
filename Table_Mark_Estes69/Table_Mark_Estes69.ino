@@ -168,8 +168,9 @@ uint8_t print_width = 3;
 
 #include "Table_Mark_Estes_Impl.h"
 
+// WIFI_HOSTNAME isn't actually used to set hostname anymore now that it's
+// done from NVRAM, but it's still used to gate the WIFI code.
 #ifdef WIFI_HOSTNAME
-
 void on_ota_start() {
     Serial.println("\r\nGot OTA - Executing Matrix Shutdown Callback");
     
@@ -214,14 +215,17 @@ void display_hostname() {
   matrix->fillRect(0, 64-7*3, 64, 21, 0);
   matrix->setFont(&TomThumb);
   matrix->setCursor(0, 64-2*7);
-  // This is useful to show which way is up :)
+  matrix->setTextColor(matrix->Color(255,0,0));
   matrix->println("TME 69 Demo");
 #ifdef WIFI_HOSTNAME
   // This is the build time hostname, not used for anything else anymore
+  matrix->setTextColor(matrix->Color(0,255,0));
   matrix->println(WIFI_HOSTNAME);
 #endif
+  matrix->setTextColor(matrix->Color(0, 0,255));
   matrix->println(get_hostname().c_str());
   matrix->show(); 
+  matrix->setTextColor(matrix->Color(255,255,255));
   // stop the main thread for 3 seconds
   pause_until_millis = millis() + 3000;
 }
