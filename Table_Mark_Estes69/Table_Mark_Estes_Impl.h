@@ -312,6 +312,7 @@ H => set hostname in NVRAM
     newhostname.trim(); // Clean up trailing '\r' if present
     Serial.printf("Received new hostname %s, saving in flash\r\n", newhostname.c_str());
     set_hostname(newhostname);
+    Serial.println("Track hostnames in linux with: avahi-browse -rt _arduino._tcp");
     ArduinoOTA.end();
     ArduinoOTA.setHostname(newhostname.c_str());
     ArduinoOTA.begin();
