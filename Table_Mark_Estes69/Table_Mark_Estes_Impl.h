@@ -249,8 +249,7 @@ n => next pattern
 p => prev pattern
 b => change brightness (if powering panel from USB, too bright can crash)
 B => save brightness to NVRAM (do not save until you test it doesn't crash)
-123 => change to pattern 123
-)");
+123 => change to pattern 123)");
 
 #ifdef WIFI_HOSTNAME
     Serial.println(R"(
@@ -290,7 +289,7 @@ H => set hostname in NVRAM
 #ifdef WIFI_HOSTNAME
   else if (readchar == 'H') {
     Serial.read(); // read potential newline
-    Serial.printf("Current Hostname: %s\r\n", get_hostname());
+    Serial.printf("Current Hostname: %s\r\n", get_hostname().c_str());
     Serial.print("Input New Hostname: ");
 
     String newhostname = "";
@@ -320,7 +319,7 @@ H => set hostname in NVRAM
   }
   else if (readchar == 'd') {
     Serial.println("Serial => display hostname");
-    Serial.printf("Hostname %s\n", get_hostname());
+    Serial.printf("Hostname %s\n", get_hostname().c_str());
     display_hostname();
   }
   else if (readchar == 'i') {
