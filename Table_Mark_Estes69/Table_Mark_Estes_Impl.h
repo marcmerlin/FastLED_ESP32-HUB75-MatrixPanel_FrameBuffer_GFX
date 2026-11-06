@@ -256,8 +256,28 @@ B => save brightness to NVRAM (do not save until you test it doesn't crash)
 i => show IP
 d => display hostname
 H => set hostname in NVRAM
+w => set wifi mode (1: slave, 2: AP, 3: ForceAP)
 )");
 #endif
+  }
+  else if (readchar == 'w') {
+    Serial.read(); // read potential newline
+    // defined and read in wifi_setup
+    Serial.printf("Current Wifi Mode: %d\r\n", wifi_master_slave_forceap);
+    Serial.print("Input 1 (slave), 2 (master), 3 (forceap): ");
+
+    // Block efficiently until a newline arrives, building the string manually
+    while (true) {
+      if (Serial.available()) {
+        char c = Serial.read();
+        if (c < '0' || c > '3') { Serial.printf("%c invalid\r\n", c); break; }
+        wifi_master_slave_forceap = c - '0';
+	set_wifi_mode(wifi_master_slave_forceap);
+      } else {
+	// Serial can come from wifi, so allow it to run
+	wifi_loop();
+      }
+    }
   }
   else if (readchar == 'b') {
     Serial.read(); // read potential newline
@@ -269,7 +289,7 @@ H => set hostname in NVRAM
     while (true) {
       if (Serial.available()) {
         char c = Serial.read();
-        if (c < '0' || c > '9') break;
+        if (c < '0' || c > '9') { Serial.printf("%c invalid\r\n", c); break; }
         newbrightness = newbrightness * 10 + c - '0';
       } else {
 	// Serial can come from wifi, so allow it to run

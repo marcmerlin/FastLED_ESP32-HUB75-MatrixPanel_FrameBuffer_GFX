@@ -5,7 +5,7 @@
 #define MAX_SLAVES 10
 
 #define AP_MAX_CLIENTS 10
-#define WIFI_AP_CHANNEL 9
+
 // May make things more stable but costs more power
 // In my testing on a bit network, the slave can miss the master broadcasts
 // while it's sleeping
@@ -34,13 +34,23 @@
 #define TELNET_PORT 23
 #endif
 
-
 #include "wifi_secrets.h"
+
+#ifndef WIFI_AP_CHANNEL
+#define WIFI_AP_CHANNEL 1
+#endif
+
+
 #include <WiFi.h>
-#include <Preferences.h>
 /// used for EVERY_N_SECONDS
 #include "FastLED.h"
 
+#ifdef ESP32
+#define NVRAM
+#endif
+
+#ifdef NVRAM
+#include <Preferences.h>
 Preferences prefs;
 
 void set_hostname(const String& new_id) {
@@ -90,6 +100,26 @@ uint8_t get_nvram_brightness() {
     
     return brightness;
 }
+
+void set_nvram_master_slave_forceap(const uint8_t master_slave_forceap) {
+    prefs.begin("TME69", false); // Open namespace, false = read/write
+    
+    prefs.putUChar("master_slave_forceap", master_slave_forceap);
+    prefs.end();
+}
+
+uint8_t get_nvram_master_slave_forceap() {
+    prefs.begin("TME69", true); // true = read-only
+    
+    // Read the key. The second argument (0) is the default value 
+    // returned if the key does not exist yet (e.g., first boot).
+    uint8_t master_slave_forceap = prefs.getUChar("master_slave_forceap", 0);
+    
+    prefs.end();
+    
+    return master_slave_forceap;
+}
+#endif
 
 // ####################################################################
 // Serial network splitter. Anything below here will get network serial
@@ -299,6 +329,7 @@ volatile bool ota_in_progress = false;
 void (*wifi_main_page_callback)() = nullptr;
 void (*wifi_connect_callback)() = nullptr;
 
+volatile uint8_t wifi_master_slave_forceap = 0;
 
 // this may stop udp packets from being processed, turn off when not debugging
 // #define WIFI_SNIFFER
@@ -859,6 +890,23 @@ void connectionStatus(const char *ssid, bool trying, bool failure, bool success)
   }
 }
 
+void set_wifi_mode(uint8_t msf) {
+  if (msf == 1) {
+      Serial.println(">>>>>>>>>>>>>> Waveshare Configured for Wifi client (slave) mode");
+      WIFI_SLAVE_MODE = true;
+  }
+  if (msf == 2) {
+      Serial.println(">>>>>>>>>>>>>> Waveshare Configured for Wifi AP mode but will try WIFI_SSID first");
+      Serial.println(">>>>>>>>>>>>>> AP/Slave may not work on some APs unless you configure proxy ARP on the AP");
+      WIFI_SLAVE_MODE = false;
+  }
+  if (msf == 3) {
+      Serial.println(">>>>>>>>>>>>>> Waveshare Configured for Wifi ForceAP");
+      WIFI_SLAVE_MODE = false;
+      WIFI_FORCEAP_MODE = true;
+  }
+}
+
 // we need a callback because it calls the matrix we can't access here
 void wifi_setup(void (*main_page_callback)() = nullptr, void (*ota_start_callback)() = nullptr, void (*_wifi_connect_callback)() = nullptr) {
   wifi_main_page_callback = main_page_callback;
@@ -866,8 +914,17 @@ void wifi_setup(void (*main_page_callback)() = nullptr, void (*ota_start_callbac
   masterBootToken = esp_random();
 
   Serial.println();
-  Serial.println(">>>> WIFI Setup...");
-  #ifdef ARDUINO_WAVESHARE_ESP32_S3_ZERO
+  Serial.println(">>>> WIFI Setup, reading bootup config...");
+
+  // Some chips do not have NVRAM
+  #if defined(NVRAM)
+      wifi_master_slave_forceap = get_nvram_master_slave_forceap();
+      set_wifi_mode(wifi_master_slave_forceap);
+  #endif
+
+  // We can use I/O pins and wires to set default config
+  if (!wifi_master_slave_forceap) {
+    #ifdef ARDUINO_WAVESHARE_ESP32_S3_ZERO
       pinMode(WAVESHARE_MASTER_PIN, INPUT_PULLDOWN);  // top left, client/slave mode
       pinMode(WAVESHARE_FORCEAP_PIN, INPUT_PULLDOWN);
       pinMode(8, OUTPUT); // used as voltage source for wiring easiness
@@ -885,10 +942,12 @@ void wifi_setup(void (*main_page_callback)() = nullptr, void (*ota_start_callbac
 	  Serial.println(">>>>>>>>>>>>>> AP/Slave may not work on some APs unless you configure proxy ARP on the AP");
 	  WIFI_SLAVE_MODE = false;
       }
-  #else
+    // and if nothing is done, we default as slave
+    #else
       Serial.println(">>>>>>>>>>>>>> Waveshare Configured for Wifi client (slave) mode");
       WIFI_SLAVE_MODE = true;
-  #endif
+    #endif
+  }
 
   Serial.println(">>>> OmWebserver Setup...");
   WebServer = new OmWebServer();
