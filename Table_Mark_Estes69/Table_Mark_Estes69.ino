@@ -8,10 +8,6 @@
 // #define WIFI_HOSTNAME screen1
 #if __has_include("wifi_secrets.h")
     #include "wifi_secrets.h"
-    #pragma message WIFI_AP_SSID
-    #define BASE_AP_SSID WIFI_AP_SSID
-    #undef WIFI_AP_SSID
-    #define WIFI_AP_SSID BASE_AP_SSID "-TME69"
     #define WIFI_AP_CHANNEL 6
     #ifndef WIFI_HOSTNAME 
         #define WIFI_HOSTNAME "TME69-changeme"
