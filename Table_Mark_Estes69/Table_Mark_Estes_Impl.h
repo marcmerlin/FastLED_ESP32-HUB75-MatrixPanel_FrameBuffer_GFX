@@ -278,7 +278,7 @@ H => set hostname in NVRAM
     }
 
     //Serial.printf("Received new brightness %s, saving in flash\r\n", newbrightness.c_str());
-    Serial.printf("Received new brightness %d, saving in flash\r\n", newbrightness);
+    Serial.printf("Received new brightness %d. Use 'B' to save to flash\r\n", newbrightness);
     matrix->setBrightness(newbrightness);
     matrix_brightness = newbrightness;
   }

@@ -11,6 +11,7 @@
     #ifndef WIFI_HOSTNAME 
         #define WIFI_HOSTNAME "TME69-changeme"
     #endif
+    #define WIFI_BEACON_ID "TME69"
     #include "wifi_serial_ota.h"
 #endif
 
@@ -203,10 +204,25 @@ void on_wifi_connect() {
     
     // stop the main thread for 3 seconds
     pause_until_millis = millis() + 3000;
-    matrix->fillRect(0, 0, 64, 7, 0);
     matrix->setFont(&TomThumb);
-    matrix->setCursor(0, 6);
-    matrix->print(String("> ") + WiFi.localIP().toString().c_str() + " <");
+    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
+        matrix->fillRect(0, 0, 64, 14, 0);
+        matrix->setTextColor(matrix->Color(255,0,0));
+        matrix->setCursor(0, 6);
+        matrix->print(String(">>>> AP MODE <<<<"));
+        matrix->setCursor(0, 13);
+        matrix->print(String("> ") + WiFi.softAPIP().toString().c_str() + " <");
+        matrix->fillRect(0, 64-7, 64, 7, 0);
+        matrix->setCursor(0, 63);
+        matrix->setTextColor(matrix->Color(255,255,0));
+        matrix->print(String(">>>> AP MODE <<<<"));
+    } else {
+        matrix->fillRect(0, 0, 64, 7, 0);
+        matrix->setTextColor(matrix->Color(0,255,0));
+        matrix->setCursor(0, 6);
+        matrix->print(String("> ") + WiFi.localIP().toString().c_str() + " <");
+    }
+    matrix->setTextColor(matrix->Color(255,255,255));
     matrix->show(); 
 }
 #endif
