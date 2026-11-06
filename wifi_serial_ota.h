@@ -1,7 +1,41 @@
 #ifndef WIFI_SERIAL_OTA_H
 #define WIFI_SERIAL_OTA_H
 
+// This is limited to 10 Wifi Clients by the arduino Wifi Core but defaults to 4
+#define MAX_SLAVES 10
+
+#define AP_MAX_CLIENTS 10
+#define WIFI_AP_CHANNEL 9
+// May make things more stable but costs more power
+// In my testing on a bit network, the slave can miss the master broadcasts
+// while it's sleeping
+#define WIFINOSLEEP
+
+#define WAVESHARE_MASTER_PIN 7  // top left, client/slave mode after client to WIFI_SSID fails
+#define WAVESHARE_FORCEAP_PIN 9 // below pin8, force creating AP even when WIFI_SSID is there
+
+// you define WIFI_HOSTNAME before doing #include "wifi_serial_ota.h"
+// Also define WIFI_SSID and WIFI_PASSWORD before you include
+// However, this is now only left in case you want to rip out EEPROM support
+// as hostname is stored in EEPROM so it can be changed at runtime on each device
+#ifndef WIFI_HOSTNAME
+#define WIFI_HOSTNAME "CHANGEME WIFI_HOSTNAME"
+#endif
+
+#ifndef WIFI_OTA_PWD
+#define WIFI_OTA_PWD` "CHANGEME"
+#endif
+
+#ifndef TELNET_PORT
+#define TELNET_PORT 23
+#endif
+
+
+#include "wifi_secrets.h"
+#include <WiFi.h>
 #include <Preferences.h>
+/// used for EVERY_N_SECONDS
+#include "FastLED.h"
 
 Preferences prefs;
 
@@ -53,62 +87,9 @@ uint8_t get_nvram_brightness() {
     return brightness;
 }
 
-
-// ###########################################################################################
-// End of EEPROM, Wifi/OTA Start
-// ###########################################################################################
-
-#if 0
-How do you find your device after it boots?
-
-sauron:~# avahi-browse -rt _arduino._tcp
-+  wlan0 IPv4 P1.825-64BY64                                 _arduino._tcp        local
-+  wlan0 IPv4 Marc NFL-3                                    _arduino._tcp        local
-+  wlan0 IPv4 P4-64BY32X2                                   _arduino._tcp        local
-+  wlan0 IPv4 Marc NFL                                      _arduino._tcp        local
-=  wlan0 IPv4 P1.825-64BY64                                 _arduino._tcp        local
-   hostname = [P1\.825-64BY64.local]
-   address = [192.168.205.187]
-   port = [3232]
-   txt = ["board=adafruit_matrixportal_esp32s3" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
-=  wlan0 IPv4 Marc NFL-3                                    _arduino._tcp        local
-   hostname = [Marc\032NFL-3.local]
-   address = [192.168.205.194]
-   port = [3232]
-   txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
-=  wlan0 IPv4 P4-64BY32X2                                   _arduino._tcp        local
-   hostname = [P4-64BY32X2.local]
-   address = [192.168.205.203]
-   port = [3232]
-   txt = ["board=adafruit_matrixportal_esp32s3" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
-=  wlan0 IPv4 Marc NFL                                      _arduino._tcp        local
-   hostname = [Marc\032NFL.local]
-   address = [192.168.205.218]
-   port = [3232]
-   txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
-#endif
-
-#include "wifi_secrets.h"
-#include <WiFi.h>
-#include <WiFiMulti.h>
-#include <ArduinoOTA.h>
-
-// you define WIFI_HOSTNAME before doing #include "wifi_serial_ota.h"
-// Also define WIFI_SSID and WIFI_PASSWORD before you include
-// However, this is now only left in case you want to rip out EEPROM support
-// as hostname is stored in EEPROM so it can be changed at runtime on each device
-#ifndef WIFI_HOSTNAME
-#define WIFI_HOSTNAME "CHANGEME WIFI_HOSTNAME"
-#endif
-
-#ifndef WIFI_OTA_PWD
-#define WIFI_OTA_PWD` "CHANGEME"
-#endif
-
-#ifndef TELNET_PORT
-#define TELNET_PORT 23
-#endif
-
+// ####################################################################
+// Serial network splitter. Anything below here will get network serial
+// ####################################################################
 
 template <typename T>
 class GenericSerialSplitter : public Stream {
@@ -267,23 +248,613 @@ GenericSerialSplitter<decltype(Serial)> Splitter(Serial, TELNET_PORT);
 
 
 // ###########################################################################################
-// End of Serial hijack, WIFI start
+// End of Serial hijack, SoftAP Diagnostic & DHCP Management Utilities Start
 // ###########################################################################################
+
+#include <OmEspHelpers.h>
+#include <esp_wifi.h> // esp_wifi_get_ps
+#include <esp_netif.h>
+#include <ESPmDNS.h>
+#include <mdns.h>
+#include <WiFiMulti.h>
+#include <ArduinoOTA.h>
+
+OmWebServer *WebServer = NULL;
+OmWebPages *WebPages = NULL;
+
+// Allows a connected device via serial to feed a remote IP as a 32bit number
+IPAddress RPI_IP = IPAddress(0, 0, 0, 0);
+// Allows a slave ESP32 to send its IP to be notified of pattern changes
+ IPAddress Slave_IP = IPAddress(0, 0, 0, 0);
+IPAddress Slave_IPs[MAX_SLAVES] = { IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0) };
+uint8_t slave_ip_count = 0;
+
+bool WIFI_SLAVE_MODE = false;
+bool WIFI_FORCEAP_MODE = false;
+// is the wifi client/slave connecting to the home test debug network?
+// try to connect to the ESP32 AP first
+bool WIFI_CLIENT_TESTING_NETWORK = false;
+volatile uint32_t send_slave_ip_to_master_tries = 0;
+volatile bool wifi_network_stable = false;
+volatile uint32_t lastMasterBootToken = 0;   // Tracked by Slave to detect Master restarts
+
+// UDP portable discovery of slave to find ESP32 master (which in turn sends it back change pattern commands)
+#include <NetworkUdp.h>
+const uint16_t UDP_DISCOVERY_PORT = 4210;
+NetworkUDP udp; // Core 3.x native class type (WiFiUDP is just a typedef of this)
+uint32_t masterBootToken = 0;       // Generated by Master at boot
+IPAddress Master_IP(0, 0, 0, 0); // Dynamically updated by Slave
 
 volatile bool ota_in_progress = false;
 
-void wifi_loop() {
-  ArduinoOTA.handle();
-  if (ota_in_progress) return;
+inline void (*wifi_main_page_callback)() = nullptr;
 
-  Splitter.handle();
+
+// this may stop udp packets from being processed, turn off when not debugging
+// #define WIFI_SNIFFER
+#ifdef WIFI_SNIFFER
+    // Volatile globals to pass data safely from ISR to the main thread
+    volatile bool sniffer_caught_packet = false;
+    volatile uint16_t sniffer_packet_len = 0;
+
+    void IRAM_ATTR wifi_sniffer_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
+        if (type != WIFI_PKT_DATA) return; 
+
+        wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
+        uint8_t *payload = pkt->payload;
+        uint16_t len = pkt->rx_ctrl.sig_len;
+
+        // Brute-force search for Port 4210 (0x1072)
+        for (uint16_t i = 0; i < len - 1; i++) {
+            if (payload[i] == 0x10 && payload[i+1] == 0x72) {
+                // NEVER print here. Just capture the state and exit quickly.
+                sniffer_packet_len = len;
+                sniffer_caught_packet = true;
+                break;
+            }
+        }
+    }
+#endif
+
+
+// Local table to track DHCP leases since ESP-IDF v5.1 hides the lwIP table
+struct APClient {
+    uint8_t mac[6];
+    uint32_t ip;
+    bool active;
+};
+APClient ap_clients[16];
+
+void onApEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+    switch (event) {
+	case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+	    Serial.printf("[WIFI AP] Hardware STA Connected | MAC: %02X:%02X:%02X:%02X:%02X:%02X | AID: %d\r\n",
+			  info.wifi_ap_staconnected.mac[0], info.wifi_ap_staconnected.mac[1],
+			  info.wifi_ap_staconnected.mac[2], info.wifi_ap_staconnected.mac[3],
+			  info.wifi_ap_staconnected.mac[4], info.wifi_ap_staconnected.mac[5],
+			  info.wifi_ap_staconnected.aid);
+	    
+	    for (int i = 0; i < 16; i++) {
+		if (!ap_clients[i].active || memcmp(ap_clients[i].mac, info.wifi_ap_staconnected.mac, 6) == 0) {
+		    memcpy(ap_clients[i].mac, info.wifi_ap_staconnected.mac, 6);
+		    ap_clients[i].active = true;
+		    if (!ap_clients[i].ip) ap_clients[i].ip = 0; 
+		    break;
+		}
+	    }
+	    break;
+
+	case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED: {
+	    const uint8_t *raw_ip = (const uint8_t*)&info.wifi_ap_staipassigned.ip.addr;
+	    Serial.printf("[DHCP SERVER] Lease Assigned | IP: %d.%d.%d.%d\r\n",
+			  raw_ip[0], raw_ip[1], raw_ip[2], raw_ip[3]);
+	    
+	    for (int i = 0; i < 16; i++) {
+		if (ap_clients[i].active && memcmp(ap_clients[i].mac, info.wifi_ap_staipassigned.mac, 6) == 0) {
+		    ap_clients[i].ip = info.wifi_ap_staipassigned.ip.addr;
+		    break;
+		}
+	    }
+	    break;
+	}
+
+	case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+	    Serial.printf("[WIFI AP] Hardware STA Disconnected | MAC: %02X:%02X:%02X:%02X:%02X:%02X | AID: %d\r\n",
+			  info.wifi_ap_stadisconnected.mac[0], info.wifi_ap_stadisconnected.mac[1],
+			  info.wifi_ap_stadisconnected.mac[2], info.wifi_ap_stadisconnected.mac[3],
+			  info.wifi_ap_stadisconnected.mac[4], info.wifi_ap_stadisconnected.mac[5],
+			  info.wifi_ap_stadisconnected.aid);
+	    
+	    for (int i = 0; i < 16; i++) {
+		if (ap_clients[i].active && memcmp(ap_clients[i].mac, info.wifi_ap_stadisconnected.mac, 6) == 0) {
+		    ap_clients[i].active = false;
+		    ap_clients[i].ip = 0;
+		    break;
+		}
+	    }
+	    break;
+
+	default:
+	    break;
+    }
+}
+
+void configure_short_dhcp_lease() {
+    esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (ap_netif) {
+	esp_netif_dhcps_stop(ap_netif);
+	
+	uint32_t lease_time = 5; 
+	esp_netif_dhcps_option(ap_netif, ESP_NETIF_OP_SET, ESP_NETIF_IP_ADDRESS_LEASE_TIME, &lease_time, sizeof(lease_time));
+	
+	esp_netif_dhcps_start(ap_netif);
+	Serial.println(">>>>>>>>>> [DHCP SERVER] Lease time configured to 5 minutes <<<<<<<");
+    }
+}
+
+void print_ap_client_table() {
+    if (WiFi.getMode() != WIFI_AP && WiFi.getMode() != WIFI_AP_STA) return;
+
+    wifi_sta_list_t wifi_sta_list;
+    if (esp_wifi_ap_get_sta_list(&wifi_sta_list) != ESP_OK) return;
+
+    wifi_config_t ap_conf;
+    uint8_t max_sta_configured = AP_MAX_CLIENTS;
+    if (esp_wifi_get_config(WIFI_IF_AP, &ap_conf) == ESP_OK) {
+	if (ap_conf.ap.max_connection < AP_MAX_CLIENTS) {
+	    Serial.printf("\n>>> [AUTO-HEAL] AP max_connection was %d! Re-forcing to %d...<<<<\r\n", 
+			  ap_conf.ap.max_connection, AP_MAX_CLIENTS);
+	    WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD, 1, 0, AP_MAX_CLIENTS);
+	    configure_short_dhcp_lease();
+	    esp_wifi_get_config(WIFI_IF_AP, &ap_conf);
+	}
+	max_sta_configured = ap_conf.ap.max_connection;
+    }
+
+    uint8_t dhcp_max = 8; 
+    
+    int active_leases = 0;
+    for (int i = 0; i < 16; i++) {
+	if (ap_clients[i].active && ap_clients[i].ip != 0) active_leases++;
+    }
+
+    int dhcp_slots_left = (int)dhcp_max - active_leases;
+    int wifi_slots_left = (int)max_sta_configured - (int)wifi_sta_list.num;
+
+    Serial.println("\r\n============================= AP STATUS =============================");
+    Serial.printf("Wi-Fi Associated STAs : %d / %d (Slots Available: %d)\r\n",
+		  wifi_sta_list.num, max_sta_configured, max(0, wifi_slots_left));
+    Serial.printf("Active DHCP IP Leases : %d / %d (Leases Available: %d)\r\n",
+		  active_leases, dhcp_max, max(0, dhcp_slots_left));
+    Serial.println("---------------------------------------------------------------------");
+
+    for (int i = 0; i < wifi_sta_list.num; i++) {
+	wifi_sta_info_t *sta = &wifi_sta_list.sta[i];
+	
+	char ip_str[16] = "No IP / Pending";
+	for (int j = 0; j < 16; j++) {
+	    if (ap_clients[j].active && memcmp(sta->mac, ap_clients[j].mac, 6) == 0) {
+		if (ap_clients[j].ip != 0) {
+		    const uint8_t *raw_ip = (const uint8_t*)&ap_clients[j].ip;
+		    snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d", raw_ip[0], raw_ip[1], raw_ip[2], raw_ip[3]);
+		}
+		break;
+	    }
+	}
+
+	Serial.printf("[%02d] MAC: %02X:%02X:%02X:%02X:%02X:%02X | RSSI: %4d dBm | IP: %s\r\n",
+		      i + 1,
+		      sta->mac[0], sta->mac[1], sta->mac[2], sta->mac[3], sta->mac[4], sta->mac[5],
+		      sta->rssi, ip_str);
+    }
+    Serial.println("=====================================================================\r\n");
+}
+
+// ---------------------------------------------------------------------------
+volatile bool slave_ip_sent = false;
+
+void send_slave_ip_to_master() {
+    if (!wifi_network_stable) return;
+    if (send_slave_ip_to_master_tries > 15) return;
+    
+    // (uint32_t)Master_IP != 0 mathematically guarantees we never 
+    // suffer a TCP lockup trying to connect to an uninitialized IP object.
+    if (WIFI_SLAVE_MODE && WiFi.status() == WL_CONNECTED && !slave_ip_sent) {
+	if ((uint32_t)Master_IP != 0) {
+	    NetworkUDP checkinUdp; // Use a local, transient UDP socket
+
+	    if (checkinUdp.beginPacket(Master_IP, 23)) {
+		IPAddress myIP = WiFi.localIP();
+		
+		
+		uint32_t ipNum = ((uint32_t)myIP[0] << 24) | 
+				 ((uint32_t)myIP[1] << 16) | 
+				 ((uint32_t)myIP[2] << 8)  | 
+				  (uint32_t)myIP[3];
+				  
+		uint64_t payload = (uint64_t)ipNum | 0x100000000ULL;
+		String payloadStr = "";
+		uint64_t temp = payload;
+		while(temp > 0) {
+		    payloadStr = (char)('0' + (temp % 10)) + payloadStr;
+		    temp /= 10;
+		}
+		checkinUdp.println(payloadStr);
+		checkinUdp.endPacket();
+		slave_ip_sent = true;
+		Serial.printf("Successfully sent Slave IP %s to Master at %s via UDP\r\n", payloadStr, Master_IP.toString().c_str());
+	    } else {
+		Serial.print("Cannot send slave IP to Master (unknown IP), will retry... ");
+		Serial.println(send_slave_ip_to_master_tries);
+		send_slave_ip_to_master_tries+=1;
+	    }
+	}
+    }
+}
+
+void broadcast_master_presence() {
+     if (!WIFI_SLAVE_MODE) {
+	 if (WiFi.status() == WL_CONNECTED || WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
+	     bool isAP = (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA);
+	     
+	     IPAddress broadcastIP = isAP ? IPAddress(255, 255, 255, 255) : WiFi.broadcastIP();
+	     
+	     if (udp.beginPacket(broadcastIP, UDP_DISCOVERY_PORT)) {
+		 udp.write((uint8_t*)&masterBootToken, sizeof(masterBootToken));
+		 udp.endPacket();
+		 EVERY_N_SECONDS(60) {
+		    Serial.printf(">>>>>>>>>>>>>>> Master: Sent beacon %u to %s:%d", masterBootToken, broadcastIP.toString().c_str(), UDP_DISCOVERY_PORT);
+		    if (slave_ip_count > 0) {
+			Serial.print(" (current known Slave IPs: ");
+			for(uint8_t i = 0; i < slave_ip_count; i++) {
+			    Serial.print(Slave_IPs[i].toString().c_str());
+			    if(i < slave_ip_count - 1) Serial.print(", ");
+			}
+			Serial.println(")");
+		    } else {
+		       Serial.println(" (slave IPs unknown)");
+		    }
+		}
+	     }
+
+	     // 2. The robust Unicast Rescue (Required for rebooted slaves)
+	     // This guarantees delivery via 802.11 MAC ACKs, ignoring broadcast drops.
+	     for (uint8_t i = 0; i < slave_ip_count; i++) {
+		 if (udp.beginPacket(Slave_IPs[i], UDP_DISCOVERY_PORT)) {
+		     udp.write((uint8_t*)&masterBootToken, sizeof(masterBootToken));
+		     udp.endPacket();
+		 }
+	     }
+	 }
+     }
+}
+
+void rebuild_main_page() {
+    static uint8_t count=0;
+    count++;
+
+    WebPages->beginPage("Main");
+
+    WebPages->addHtml([] (OmXmlWriter & w, int ref1, void *ref2)
+    {
+	// Keep track of how many times the web page is rebuilt
+        w.puts(WIFI_SLAVE_MODE ? "Slave" : WIFI_FORCEAP_MODE ? "ForceAP" : "Master ");
+	w.puts((String(" Built: ") + __DATE__ + " " + __TIME__ ).c_str());
+	w.puts(". Html Refresh: ");
+	w.puts(String(count).c_str());
+	w.puts("<BR>\n");
+        if (WIFI_SLAVE_MODE) {
+            w.puts("Master IP: ");
+            w.puts("<a href=http://");
+            w.puts(Master_IP.toString().c_str());
+            w.puts("/>");
+            w.puts(Master_IP.toString().c_str());
+            w.puts("</a> ");
+            w.puts("<BR>\n");
+        } else {
+            w.puts("Slave IPs: ");
+            if (slave_ip_count == 0) {
+                w.puts("None");
+            } else {
+                for(uint8_t i = 0; i < slave_ip_count; i++) {
+                    w.puts("<a href=http://");
+                    w.puts(Slave_IPs[i].toString().c_str());
+                    w.puts("/>");
+                    w.puts(Slave_IPs[i].toString().c_str());
+                    w.puts("</a> ");
+                }
+            }
+            w.puts("<BR>\n");
+        }
+    });
+    if (wifi_main_page_callback) wifi_main_page_callback();
+}
+
+
+void listen_for_master_broadcast() {
+    if (!wifi_network_stable) return;
+    if (WIFI_SLAVE_MODE) {
+	int packetSize;
+
+	#ifdef WIFI_SNIFFER
+	    if (sniffer_caught_packet) {
+		Serial.printf("\r\n[TCPDUMP] HARDWARE MAC RX: Port 4210 frame hit the antenna! (Len: %d)\r\n", sniffer_packet_len);
+		sniffer_caught_packet = false;
+	    }
+	#endif
+
+	if (WiFi.status() == WL_CONNECTED) {
+	    static bool udpActive = false;
+	    if (!udpActive) {
+		udp.begin(UDP_DISCOVERY_PORT);
+		udpActive = true;
+		Serial.printf(">>>>>>>>>>>>>  Slave Discovery reliably bound to port %d\r\n", UDP_DISCOVERY_PORT);
+	    }
+
+	    packetSize = udp.parsePacket();
+	    if (packetSize >= sizeof(uint32_t)) {
+		uint32_t receivedToken = 0;
+		udp.read((uint8_t*)&receivedToken, sizeof(receivedToken));
+		IPAddress senderIP = udp.remoteIP();
+		
+		if (senderIP != Master_IP || receivedToken != lastMasterBootToken) {
+		    Serial.printf(">>>>>>>>>>>>>> Master Found! IP: %s, Token: %u\r\n", senderIP.toString().c_str(), receivedToken);
+		    Master_IP = senderIP;
+		    rebuild_main_page();
+		    lastMasterBootToken = receivedToken;
+		    slave_ip_sent = false; 
+		    send_slave_ip_to_master_tries = 0; 
+		    // Now that we have the master broadcast, we can go to sleep since
+		    // unicast will reach us more reliably.
+		    #ifdef WIFINOSLEEP
+		      Serial.println("Now that we know master, enable WIFI Sleep to save power");
+		      WiFi.setSleep(true);
+		      // do it both ways
+		      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+		    #endif
+		} else if (!slave_ip_sent) {
+		    // Master is still here, but we haven't successfully sent our IP yet. 
+		    // Keep our retry counter alive! Not sure when or if this runs.
+		    send_slave_ip_to_master_tries = 0;
+		    Serial.printf(">>>>>>>>>>>>>> Need to send IP to Master %s\r\n", senderIP.toString().c_str());
+		}
+	    }
+	}
+    }
+}
+
+
+
+
+
+// ###########################################################################################
+// End of Network Tools, Wifi/OTA Start
+// ###########################################################################################
+
+#if 0
+How do you find your device after it boots?
+
+sauron:~# avahi-browse -rt _arduino._tcp
++  wlan0 IPv4 P1.825-64BY64                                 _arduino._tcp        local
++  wlan0 IPv4 Marc NFL-3                                    _arduino._tcp        local
++  wlan0 IPv4 P4-64BY32X2                                   _arduino._tcp        local
++  wlan0 IPv4 Marc NFL                                      _arduino._tcp        local
+=  wlan0 IPv4 P1.825-64BY64                                 _arduino._tcp        local
+   hostname = [P1\.825-64BY64.local]
+   address = [192.168.205.187]
+   port = [3232]
+   txt = ["board=adafruit_matrixportal_esp32s3" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+=  wlan0 IPv4 Marc NFL-3                                    _arduino._tcp        local
+   hostname = [Marc\032NFL-3.local]
+   address = [192.168.205.194]
+   port = [3232]
+   txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+=  wlan0 IPv4 P4-64BY32X2                                   _arduino._tcp        local
+   hostname = [P4-64BY32X2.local]
+   address = [192.168.205.203]
+   port = [3232]
+   txt = ["board=adafruit_matrixportal_esp32s3" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+=  wlan0 IPv4 Marc NFL                                      _arduino._tcp        local
+   hostname = [Marc\032NFL.local]
+   address = [192.168.205.218]
+   port = [3232]
+   txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=no"]
+#endif
+
+// Standalone TCP listener for port 3232 on the AP interface (Used only for AP mDNS discovery)
+static WiFiServer ota_tcp_listener(3232);
+
+// merlin:~# avahi-browse -rt _arduino._tcp -d local
+// +  wlan0 IPv4 Marc NFL NOFLASH Slave Oct 27 2026 21:41:48   _arduino._tcp        local
+// +  wlan0 IPv4 Marc NFL NOFLASH Slave Oct 27 2026 21:41:48-3 _arduino._tcp        local
+// +  wlan0 IPv4 NOFLASH-Marc-NFL-ForceAP-Oct-30-2026-12-51-48 _arduino._tcp        local
+// =  wlan0 IPv4 Marc NFL NOFLASH Slave Oct 27 2026 21:41:48   _arduino._tcp        local
+// hostname = [Marc\032NFL\032NOFLASH\032Slave\032Oct\03227\0322026\03221\05841\05848.local]
+// address = [192.168.4.3]
+// port = [3232]
+// txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=yes"]
+// wlan0 IPv4 Marc NFL NOFLASH Slave Oct 27 2026 21:41:48-3 _arduino._tcp        local
+// hostname = [Marc\032NFL\032NOFLASH\032Slave\032Oct\03227\0322026\03221\05841\05848-3.local]
+// address = [192.168.4.4]
+// port = [3232]
+// txt = ["board=waveshare_esp32_s3_zero" "tcp_check=no" "ssh_upload=no" "auth_upload=yes"]
+// wlan0 IPv4 NOFLASH-Marc-NFL-ForceAP-Oct-30-2026-12-51-48 _arduino._tcp        local
+// hostname = [NOFLASH-Marc-NFL-ForceAP-Oct-30-2026-12-51-48.local]
+// address = [192.168.4.1]
+// port = [3232]
+// txt = ["board=waveshare_esp32_s3_zero" "auth_upload=no"]
+
+// Note that this does not work if the ESP32 is the AP
+void restart_ota_service() {
+    if (WiFi.getMode() == WIFI_MODE_NULL || WiFi.getMode() == WIFI_OFF) {
+        Serial.println("[OTA] Network not ready, aborting OTA restart.");
+        return;
+    }
+
+    ArduinoOTA.end();
+    MDNS.end();
+    ota_tcp_listener.end();
+    // 1. Sanitize hostname to strict RFC alphanumeric + hyphen format
+    String clean_date = String(__DATE__);
+    clean_date.replace(" ", "-");
+    String clean_time = String(__TIME__);
+    clean_time.replace(":", "-");
+
+    String ota_name = String("Marc-NFL-") + 
+                     (WIFI_SLAVE_MODE ? "Slave-" : WIFI_FORCEAP_MODE ? "ForceAP-" : "Master-") +
+                     clean_date + "-" + clean_time;
+
+    if (ESP.getFlashChipSize() <= 5000000) {
+        ota_name = "NOFLASH-" + ota_name;
+    }
+
+    // 2. Branch logic based on active interface
+    if (WiFi.getMode() == WIFI_STA) {
+        // --- CLIENT MODE (SLAVE) ---
+        // ArduinoOTA works perfectly out-of-the-box on the STA interface
+        ArduinoOTA.setHostname(ota_name.c_str());
+        ArduinoOTA.setPassword(WIFI_OTA_PWD);
+        ArduinoOTA.begin();
+        Serial.printf(">>>>> [OTA] Client STA Broadcast active: %s.local:3232 <<<<<\r\n", ota_name.c_str());
+        
+    } else {
+        // --- ACCESS POINT MODE (MASTER / FORCEAP) ---
+        // ArduinoOTA fails to bind TCP/mDNS to SoftAP. Use manual IDF discovery proxy.
+        if (mdns_init() != ESP_OK) {
+            Serial.println("[mDNS] mdns_init() failed");
+        } else {
+            mdns_hostname_set(ota_name.c_str());
+            mdns_instance_name_set(ota_name.c_str());
+
+            // Force mDNS to bind to the SoftAP netif handle for IPv4
+            esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+            if (ap_netif) {
+                mdns_netif_action(ap_netif, MDNS_EVENT_ENABLE_IP4);
+                Serial.println("[mDNS] Successfully attached to WIFI_AP_DEF");
+            }
+
+            // Add standard Arduino OTA service advertisement for Avahi
+            mdns_service_add(NULL, "_arduino", "_tcp", 3232, NULL, 0);
+            mdns_service_instance_name_set("_arduino", "_tcp", ota_name.c_str());
+            mdns_service_txt_item_set("_arduino", "_tcp", "board", "waveshare_esp32_s3_zero");
+            mdns_service_txt_item_set("_arduino", "_tcp", "auth_upload", "no");
+            Serial.printf("[mDNS] Advertising _arduino._tcp on %s.local\r\n", ota_name.c_str());
+        }
+
+        // Open TCP 3232 listener directly on the AP interface to satisfy avahi-browse / nc -zv
+        ota_tcp_listener.begin();
+        Serial.printf(">>>>> [OTA] AP Dummy Listener & mDNS active on 192.168.4.1:3232 (%s.local) <<<<<\r\n", ota_name.c_str());
+    }
+}
+
+void connectionStatus(const char *ssid, bool trying, bool failure, bool success)
+{
+  static uint8_t failure_cnt = 0;
+  static bool ap = WIFI_FORCEAP_MODE? true: false;
+  const char *what = "?";
+
+  if (trying)       { 
+      what = "trying"; 
+      wifi_network_stable = false;
+      Splitter.restart(); // CRITICAL: Stop UDP poll on interface drop
+  }
+  else if (failure) { 
+      what = "failure"; 
+      failure_cnt++; 
+      slave_ip_sent = false; // Reset so the slave retries if WiFi drops
+      wifi_network_stable = false;
+      Splitter.restart(); // CRITICAL: Stop UDP poll on interface drop
+  } else if (success) { 
+      what = "success"; 
+      failure_cnt = 0; 
+      send_slave_ip_to_master_tries = 0;
+      slave_ip_sent = false;      // Forces execution update on local drop
+      lastMasterBootToken = 0;    // Forces a fresh sync check via UDP stream
+      wifi_network_stable = true;
+      Splitter.restart();
+      Serial.printf("|Started wifi, slave mode enabled? %d\n\r", WIFI_SLAVE_MODE);
+
+      restart_ota_service();
+  }
+  // Disable WiFi power save to prevent LwIP from dropping broadcasts between DTIM windows 
+  // May add around 200mW of power
+#ifdef WIFINOSLEEP
+  WiFi.setSleep(false);
+  // do it both ways
+  esp_wifi_set_ps(WIFI_PS_NONE);
+#endif
+  wifi_ps_type_t ps_type = WIFI_PS_MAX_MODEM;
+  esp_wifi_get_ps(&ps_type);
+
+  // 0 = WIFI_PS_NONE (disabled), 1 = WIFI_PS_MIN_MODEM, 2 = WIFI_PS_MAX_MODEM
+  Serial.printf("Wifi slave mode enabled: %d, %s: connectionStatus for '%s' is now '%s' fail cnt: %d, power save: %d\n\r", WIFI_SLAVE_MODE, __func__, ssid, what, failure_cnt, ps_type);
+
+  if (!ap and failure_cnt > 2) {
+      // For the wifi slave, allow switching forever between AP and home test network until one works
+      if (WIFI_SLAVE_MODE and failure_cnt > 3) {
+          WebServer->clearWifis();
+          WiFi.disconnect();
+          failure_cnt = 0;
+          if (!WIFI_CLIENT_TESTING_NETWORK) {
+              Serial.println(">>>>>>>>>>>>>>>>>>>> Client/Slave mode: Too many failures with AP " WIFI_AP_SSID ", switching to " WIFI_SSID);
+              WebServer->addWifi(WIFI_SSID, WIFI_PASSWORD); // home test network
+              WIFI_CLIENT_TESTING_NETWORK = true;
+          } else {
+              Serial.println(">>>>>>>>>>>>>>>>>>>> Client/Slave mode: Too many failures with test network " WIFI_SSID ", switching to AP " WIFI_AP_SSID);
+              WebServer->addWifi(WIFI_AP_SSID, WIFI_AP_PASSWORD); // Back to AP network
+              WIFI_CLIENT_TESTING_NETWORK = false;
+
+          }
+      } else if (! WIFI_SLAVE_MODE) { 
+          Serial.println(">>>>>>>>>>>>>>>>>>>> Too many failures setting up Wifi client to " WIFI_SSID ", switching to Wifi AP mode to " WIFI_AP_SSID);
+          ap = true;
+          WebServer->clearWifis();
+          WiFi.disconnect();
+
+          // Note this forces a 4 client limit, we override in AUTO-HEAL callback
+          WebServer->setAccessPoint(WIFI_AP_SSID, WIFI_AP_PASSWORD);
+
+          // AP is up! Restart Splitter so it binds to the new AP interface (192.168.4.1)
+          Splitter.restart();
+          failure_cnt = 0;
+
+          restart_ota_service();
+      }
+  }
 }
 
 // we need a callback because it calls the matrix we can't access here
-void wifi_setup(void (*ota_start_callback)() = nullptr, void (*ota_wifi_connect_callback)() = nullptr) {
-  Serial.begin(115200);
-  //while (!Serial) {}
-  Serial.println("Start");
+void wifi_setup(void (*main_page_callback)() = nullptr, void (*ota_start_callback)() = nullptr, void (*ota_wifi_connect_callback)() = nullptr) {
+  wifi_main_page_callback = main_page_callback;
+  masterBootToken = esp_random();
+
+  #ifdef ARDUINO_WAVESHARE_ESP32_S3_ZERO
+      pinMode(WAVESHARE_MASTER_PIN, INPUT_PULLDOWN);  // top left, client/slave mode
+      pinMode(WAVESHARE_FORCEAP_PIN, INPUT_PULLDOWN);
+      pinMode(8, OUTPUT); // used as voltage source for wiring easiness
+      digitalWrite(8, HIGH);
+  #endif
+
+  Serial.println("Wifi Setup...");
+  WebServer = new OmWebServer();
+  WebServer->setStatusCallback(connectionStatus);
+
+  WebPages = new OmWebPages();
+  WebPages->setBuildDateAndTime(__DATE__, __TIME__);
+
+  // To get the ordering we want, we start with a dummy page
+  // that gets replaced with the full page later.
+  WebPages->beginPage("Main");
+  WebPages->addHtml([] (OmXmlWriter & w, int ref1, void *ref2)
+  {
+      w.putf("Placeholder\n");
+  });
+
+  WebServer->setHandler(*WebPages);
+  rebuild_main_page();
+
+  // Register debug/status callbacks
+  WiFi.onEvent(onApEvent);
 
   // Wi-Fi Event Callbacks
   WiFi.onEvent([ota_wifi_connect_callback](WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -305,11 +876,50 @@ void wifi_setup(void (*ota_start_callback)() = nullptr, void (*ota_wifi_connect_
     }
   }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-  Serial.print("Wifi: ");
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.println("Wifi: ");
+  #ifdef ARDUINO_WAVESHARE_ESP32_S3_ZERO
+  if (!digitalRead(WAVESHARE_MASTER_PIN)) {
+      Serial.println(">>>>>>>>>>>>>> Waveshare Configured for Wifi client (slave) mode");
+      WIFI_SLAVE_MODE = true;
+  } else if (digitalRead(WAVESHARE_FORCEAP_PIN)) {
+      Serial.println(">>>>>>>>>>>>>> Waveshare Configured for Wifi ForceAP");
+      WIFI_SLAVE_MODE = false;
+      WIFI_FORCEAP_MODE = true;
+  } else { 
+      Serial.println(">>>>>>>>>>>>>> Waveshare Configured for Wifi AP mode but will try WIFI_SSID first");
+      Serial.println(">>>>>>>>>>>>>> AP/Slave may not work on some APs unless you configure proxy ARP on the AP");
+      WIFI_SLAVE_MODE = false;
+  }
+  #else
+      Serial.println(">>>>>>>>>>>>>> Other Wifi Default to Wifi AP mode");
+      WIFI_SLAVE_MODE = false;
+  #endif
+
+  // Are we using the fallback testing network (by default we use the AP made by the master)
+  if (WIFI_SLAVE_MODE) {
+      // try to connect to the ESP32 AP first
+      WIFI_CLIENT_TESTING_NETWORK = false;
+      Serial.println(">>>>>>>>>>>>>> Wifi slave mode, will try to connect to AP " WIFI_AP_SSID);
+      WebServer->addWifi(WIFI_AP_SSID, WIFI_AP_PASSWORD); // MarcLED
+  } else if (WIFI_FORCEAP_MODE) { 
+    // Note this forces a 4 client limit, we override in AUTO-HEAL callback
+      WebServer->setAccessPoint(WIFI_AP_SSID, WIFI_AP_PASSWORD);
+  } else { 
+      // Start as a client for home network, if that fails, connectionStatus() will take
+      // the next step
+      Serial.println(">>>>>>>>>>>>>> Wifi Configured for Wifi AP mode, will try to connect to " WIFI_SSID);
+      WebServer->addWifi(WIFI_SSID, WIFI_PASSWORD);
+  }
+
   // I think this is default now?
   WiFi.setAutoReconnect(true);
+
+  // Enforce 10 clients immediately now that OmWebServer has likely settled
+  if (!WIFI_SLAVE_MODE && (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA || WIFI_FORCEAP_MODE)) {
+      Serial.printf("\n>>>>>>>>>> Post-Init: Enforcing %d AP Clients & 5m DHCP Lease <<<<<<<<<<\n", AP_MAX_CLIENTS);
+      WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD, WIFI_AP_CHANNEL, 0, AP_MAX_CLIENTS);
+      configure_short_dhcp_lease();
+  }
 
   ArduinoOTA.onStart([ota_start_callback]() {
     Serial.println("\r\n[OTA] Update started. Freeing network resources and locking loop.");
@@ -338,14 +948,54 @@ void wifi_setup(void (*ota_start_callback)() = nullptr, void (*ota_wifi_connect_
       Serial.println("\r\n[OTA] Transfer Complete.");
       ota_in_progress = false;
   });
-
-  Serial.println("Setup ArduinoOTA. Remote Wifi Updates Supported!");
-  //ArduinoOTA.setHostname(WIFI_HOSTNAME);
-  ArduinoOTA.setHostname(get_hostname().c_str());
-  ArduinoOTA.setPassword(WIFI_OTA_PWD);
-  ArduinoOTA.begin();
-  Serial.printf(">>>>>>>>>>>>>>>>>> OTA Ready (%s/%s)\n", get_hostname().c_str(), WIFI_OTA_PWD);
 }
+
+// Prepend Master/Slave or nothing to some debug messages
+void MSF_Print() {
+    if (WIFI_SLAVE_MODE) Serial.print("Slave ");
+    else if (WIFI_FORCEAP_MODE) Serial.print("ForceAP  ");
+    else Serial.print("Master ");
+}
+
+void wifi_loop() {
+  ArduinoOTA.handle();
+  if (ota_in_progress) return;
+
+  Splitter.handle();
+  WebServer->tick();
+
+  listen_for_master_broadcast(); // Slave reads this continuously
+  
+  EVERY_N_SECONDS(5) {
+      broadcast_master_presence(); // Master broadcasts presence
+      send_slave_ip_to_master();
+  }
+  
+  EVERY_N_SECONDS(30) {
+      if (!WIFI_SLAVE_MODE) {
+  	print_ap_client_table();
+      }
+  }
+  
+  EVERY_N_SECONDS(60) {
+    wifi_ps_type_t ps_type = WIFI_PS_MAX_MODEM;
+    esp_wifi_get_ps(&ps_type);
+    MSF_Print();
+    // 8K gives Loop() - Free Stack Space: 1952
+    // Debug exception reason: Stack canary watchpoint triggered (loopTask) 
+    // After changing stack size to 16KB, I hae now 7916KB free
+    // 0 = WIFI_PS_NONE (disabled), 1 = WIFI_PS_MIN_MODEM, 2 = WIFI_PS_MAX_MODEM
+    Serial.printf("Loop() - Stack: %d, BSSID: %s, Ch: %d, RSSI: %d, PS: %d \r\n",
+        uxTaskGetStackHighWaterMark(NULL), WiFi.BSSIDstr().c_str(),
+        WiFi.channel(), WiFi.RSSI(), ps_type);
+    // Keep Master's LwIP ARP entry for this Slave from expiring (ARP_MAXAGE = 300s)
+    if (WIFI_SLAVE_MODE && wifi_network_stable && (uint32_t)Master_IP != 0) {
+        slave_ip_sent = false;
+        send_slave_ip_to_master_tries = 0;
+    }
+  }
+}
+
 
 // ###########################################################################################
 // End of WIFI

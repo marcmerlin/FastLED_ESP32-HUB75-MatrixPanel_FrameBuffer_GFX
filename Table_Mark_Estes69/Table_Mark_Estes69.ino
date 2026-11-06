@@ -245,13 +245,12 @@ void setup()
   z = random16();
   if (MATRIX_WIDTH == MATRIX_HEIGHT) square = true;
   //delay(1500);
+  Serial.begin(115200);
   #ifdef WIFI_HOSTNAME
-    wifi_setup(on_ota_start, on_wifi_connect);
-  #else
-    Serial.begin(115200);
+    wifi_setup(NULL, on_ota_start, on_wifi_connect);
   #endif
-#ifdef TME_AUDIO
 
+#ifdef TME_AUDIO
   Serial1.begin(57600);
 
   ETin.begin(details(music), &Serial1);
