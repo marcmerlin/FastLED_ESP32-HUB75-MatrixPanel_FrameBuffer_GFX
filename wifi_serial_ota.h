@@ -382,10 +382,10 @@ APClient ap_clients[16];
 void onApEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     switch (event) {
     case ARDUINO_EVENT_WIFI_AP_START:
+	wifi_network_stable = true;
         // The AP interface is now fully up and running
         Serial.printf("[WIFI AP] Access Point Started successfully! IP: %s\r\n", WiFi.softAPIP().toString().c_str());
-
-	wifi_connect_callback();
+	if (wifi_connect_callback) wifi_connect_callback();
         break;
 
 	case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
@@ -840,6 +840,9 @@ void restart_ota_service() {
     ota_tcp_listener.end();
     // 1. Sanitize hostname to strict RFC alphanumeric + hyphen format
     String clean_date = String(__DATE__);
+    while (clean_date.indexOf("  ") >= 0) {
+        clean_date.replace("  ", " ");
+    }
     clean_date.replace(" ", "-");
     String clean_time = String(__TIME__);
     clean_time.replace(":", "-");
@@ -859,38 +862,48 @@ void restart_ota_service() {
         const char* current_board_name = "esp32_unknown";
     #endif
 
-    // 2. Branch logic based on active interface
-    if (WiFi.getMode() == WIFI_STA) {
+    // 2. Initialize MDNS explicitly before registering services
+    if (!MDNS.begin(ota_name.c_str())) {
+        Serial.println("[mDNS] Error setting up MDNS responder!");
+    }
+
+    // 3. Branch logic based on active interface
+    if (WiFi.getMode() == WIFI_STA || WiFi.getMode() == WIFI_AP_STA) {
         // --- CLIENT MODE (SLAVE) ---
+        esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        if (sta_netif) {
+            mdns_netif_action(sta_netif, MDNS_EVENT_ENABLE_IP4);
+        }
+
         // ArduinoOTA handles its own mDNS cleanly on the STA interface
         ArduinoOTA.setHostname(ota_name.c_str());
         ArduinoOTA.setPassword(WIFI_OTA_PWD);
         ArduinoOTA.begin();
+
+        // Explicitly advertise _arduino._tcp on MDNS so avahi and IDE find it immediately
+        //MDNS.addService("arduino", "tcp", 3232);
+        // ArduinoOTA already adds the service. Only append custom TXT records.
+        MDNS.addServiceTxt("arduino", "tcp", "board", current_board_name);
+        MDNS.addServiceTxt("arduino", "tcp", "auth_upload", "yes");
         Serial.printf(">>>>> [OTA] Client STA Broadcast active: %s.local:3232 <<<<<\r\n", ota_name.c_str());
     } else {
         // --- ACCESS POINT MODE (MASTER / FORCEAP) ---
-        // Use the Arduino MDNS wrapper to prevent state crashes on MDNS.end()
-        if (!MDNS.begin(ota_name.c_str())) {
-            Serial.println("[mDNS] Error setting up MDNS responder!");
-        } else {
-            // CRITICAL ESP-IDF FIX: Force mDNS to bind to the SoftAP netif handle for IPv4.
-            // Without this native IDF call, SoftAP OTA discovery fails on most devices.
-            esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-            if (ap_netif) {
-                mdns_netif_action(ap_netif, MDNS_EVENT_ENABLE_IP4);
-                Serial.println("[mDNS] Successfully attached to WIFI_AP_DEF");
-            }
-
-            // Advertise the standard Arduino OTA service
-            MDNS.addService("arduino", "tcp", 3232);
-            MDNS.addServiceTxt("arduino", "tcp", "board", current_board_name);
-            MDNS.addServiceTxt("arduino", "tcp", "auth_upload", "no");
-            Serial.printf("[mDNS] Advertising _arduino._tcp on %s.local (Board: %s)\r\n", ota_name.c_str(), current_board_name);
+        // CRITICAL ESP-IDF FIX: Force mDNS to bind to the SoftAP netif handle for IPv4.
+        // Without this native IDF call, SoftAP OTA discovery fails on most devices.
+        esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+        if (ap_netif) {
+            mdns_netif_action(ap_netif, MDNS_EVENT_ENABLE_IP4);
+            Serial.println("[mDNS] Successfully attached to WIFI_AP_DEF");
         }
 
-        // Open TCP 3232 listener directly on the AP interface to satisfy avahi-browse / nc -zv
-        ota_tcp_listener.begin();
-        Serial.printf(">>>>> [OTA] AP Dummy Listener & mDNS active on 192.168.4.1:3232 (%s.local) <<<<<\r\n", ota_name.c_str());
+        // Advertise the standard Arduino OTA service
+        MDNS.addService("arduino", "tcp", 3232);
+        MDNS.addServiceTxt("arduino", "tcp", "board", current_board_name);
+        MDNS.addServiceTxt("arduino", "tcp", "auth_upload", "no");
+        Serial.printf("[mDNS] Advertising _arduino._tcp on %s.local (Board: %s)\r\n", ota_name.c_str(), current_board_name);
+	// Open TCP 3232 listener directly on the AP interface to satisfy avahi-browse / nc -zv
+	ota_tcp_listener.begin();
+	Serial.printf(">>>>> [OTA] AP Dummy Listener & mDNS active on 192.168.4.1:3232 (%s.local) <<<<<\r\n", ota_name.c_str());
     }
 }
 
