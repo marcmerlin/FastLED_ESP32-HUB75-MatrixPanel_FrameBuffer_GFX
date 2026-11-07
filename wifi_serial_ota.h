@@ -40,6 +40,8 @@
 #define WIFI_AP_CHANNEL 1
 #endif
 
+volatile bool wifi_network_stable = false;
+
 
 #include <WiFi.h>
 /// used for EVERY_N_SECONDS
@@ -153,6 +155,11 @@ public:
   // Pass the initialization through to the underlying serial interface
   void begin(unsigned long baud) {
     hw->begin(baud);
+    // TinyUSB CDC: prevent blocking when host port is closed
+    // Hardware USB Serial/JTAG (HWCDC): drop immediately if FIFO full and no host
+    #if ARDUINO_USB_CDC_ON_BOOT
+    hw->setTxTimeoutMs(0);
+    #endif
   }
 
     // Boolean operator so "if (Serial)" and "while (!Serial)" evaluate cleanly
@@ -213,20 +220,24 @@ public:
 
   // --- STREAM/PRINT OUTPUT OVERRIDES ---
   
-  size_t write(uint8_t c) override {
-    size_t n = hw->write(c);         
-    if (client && client.connected()) {
-      client.write(c);               
+    size_t write(uint8_t c) override {
+    if (hw && *hw && hw->availableForWrite() > 0) {
+      hw->write(c);
     }
-    return n;
+    if (client && client.connected()) {
+      client.write(c);
+    }
+    return 1;
   }
 
-  size_t write(const uint8_t *buffer, size_t size) override {
-    size_t n = hw->write(buffer, size);
+    size_t write(const uint8_t *buffer, size_t size) override {
+    if (hw && *hw && hw->availableForWrite() >= (int)size) {
+      hw->write(buffer, size);
+    }
     if (client && client.connected()) {
       client.write(buffer, size);
     }
-    return n;
+    return size;
   }
 
   // --- STREAM INPUT OVERRIDES (TWO-WAY COMMS) ---
@@ -311,7 +322,6 @@ bool WIFI_FORCEAP_MODE = false;
 // try to connect to the ESP32 AP first
 bool WIFI_CLIENT_TESTING_NETWORK = false;
 volatile uint32_t send_slave_ip_to_master_tries = 0;
-volatile bool wifi_network_stable = false;
 volatile uint32_t lastMasterBootToken = 0;   // Tracked by Slave to detect Master restarts
 
 // UDP portable discovery of slave to find ESP32 master (which in turn sends it back change pattern commands)
