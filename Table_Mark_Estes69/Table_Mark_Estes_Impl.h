@@ -229,7 +229,7 @@ void newpattern()//generates all the randomness for each new pattern
     }
 
     if (new_pattern) {
-      Serial.print("Got new pattern via serial ");
+      Serial.print("Got new pattern (or IP) via serial ");
       Serial.println(new_pattern);
       // If we received an IP, we're done
       if (parse_new_IP(new_pattern)) return;

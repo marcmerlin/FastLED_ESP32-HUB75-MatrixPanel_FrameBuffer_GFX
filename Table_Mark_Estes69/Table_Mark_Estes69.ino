@@ -363,6 +363,24 @@ void setup()
   display_hostname();
 }
 
+void marc_overlay() {
+  matrix->fillRect(0, 0, 64, 8, 0);
+  // Reset to default adafruit font, that font wants cursor at top left corner
+  matrix->setFont();
+  matrix->setCursor(0, 0);
+  matrix->setTextColor(matrix->Color(0,255,0));
+  matrix->print("Marc");
+  matrix->setCursor(28, 0);
+  matrix->setTextColor(matrix->Color(0,0,255));
+  matrix->print("MERLIN");
+  matrix->fillRect(0, 55, 64, 9, 0);
+  matrix->setCursor(0, 56);
+  matrix->setTextColor(matrix->Color(255,255,0));
+  matrix->print("SuperCon");
+  matrix->setCursor(51, 56);
+  matrix->setTextColor(matrix->Color(255,0,0));
+  matrix->print("26");
+}
 
 
 void loop()
@@ -405,6 +423,9 @@ void loop()
     if (fancy == 31) president();*/
   counter++;//increment the counter which is used for many things
   // spititout();//map the 2d screen to the 8 outpus and push them out on my other matrix, not used here
+
+  marc_overlay();
+
   matrix->show();
   delay(waiter);//frame rate control
   if (Serial.available()) readchar = Serial.read(); else readchar = 0;
