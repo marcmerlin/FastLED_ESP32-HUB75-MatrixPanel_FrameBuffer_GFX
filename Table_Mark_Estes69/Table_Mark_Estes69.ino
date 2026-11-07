@@ -89,6 +89,8 @@ AuroraDrawable* items[] = {
 };
 AuroraDrawable *patternz;
 
+// no-op for now, need to write code
+bool DEMO_BESTOF = true;
 
 int8_t item = random(13);
 
@@ -163,16 +165,86 @@ CRGB darkcolor;
 CRGB lightcolor;
 char readchar;
 
-
 #ifdef SHOW_PATTERN_NUM
 uint8_t print_width = 3;
 #endif
 
 #include "Table_Mark_Estes_Impl.h"
 
+void change_brightness(uint8_t nb) {
+    matrix_brightness = nb;
+    matrix->setBrightness(nb);
+    Serial.printf("Set brightness to %d (not saving to nvram as high brightness can cause a crash loop due to power starvation)\n\r", nb);
+}
+
+
 // WIFI_HOSTNAME isn't actually used to set hostname anymore now that it's
 // done from NVRAM, but it's still used to gate the WIFI code.
 #ifdef WIFI_HOSTNAME
+
+bool DEMO_PAUSE = false;
+#define HTML_BESTOF	    100
+#define HTML_BRIGHT	    101
+#define HTML_PAUSE	    102
+#define HTML_REBOOTESP32    109
+#define HTML_BUTPREV	    110
+#define HTML_BUTNEXT	    111
+
+void actionProc(const char *pageName, const char *parameterName, int value, int ref1, void *ref2) {
+    static int actionCount = 0;
+    actionCount++;
+    Serial.printf("%4d %s.%s value=0x%08x/%dslider 2 ref1=%d\n", actionCount, pageName, parameterName, value, value, ref1);
+
+    switch (ref1) {
+    case HTML_BUTPREV:
+	if (!value) break;
+	Serial.println("PREVIOUS pressed");
+        readchar = 'p';
+        newpattern();
+	break;
+
+    case HTML_BUTNEXT:
+	if (!value) break;
+	Serial.println("NEXT pressed");
+        readchar = 'n';
+        newpattern();
+	break;
+
+    case HTML_REBOOTESP32:
+	if (!value) break;
+	Serial.println("Reboot ESP32 pressed");
+	rebootESP32();
+	break;
+
+    case HTML_BESTOF:
+	if (!value) break;
+	Serial.print("Bestof: ");
+	Serial.println(value);
+	Serial.println("Write me");
+	break;
+
+    case HTML_BRIGHT:
+	Serial.print("Brightness change to ");
+	Serial.println(value);
+	change_brightness(value);
+	break;
+
+    case HTML_PAUSE:
+        DEMO_PAUSE = value;
+        if (value) {
+            Serial.println("Pausing Demo");
+        } else { 
+            Serial.println("Resuming Demo");
+            readchar = 'n';
+            newpattern();
+        }
+	break;
+    }
+}
+
+
+
+
 void on_ota_start() {
     Serial.println("\r\nGot OTA - Executing Matrix Shutdown Callback");
     
@@ -245,6 +317,19 @@ void display_hostname() {
   matrix->setTextColor(matrix->Color(255,255,255));
   // stop the main thread for 3 seconds
   pause_until_millis = millis() + 3000;
+}
+
+void rebuild_main_page_local() {
+    WebPages->addSlider(0, 1, "Bestof Demos Only", actionProc, DEMO_BESTOF, HTML_BESTOF);
+    WebPages->addSlider(0, 1, "Pause on Demo", actionProc, DEMO_PAUSE, HTML_PAUSE);
+    WebPages->addSlider(0, 255, "Brightness", actionProc, matrix_brightness, HTML_BRIGHT);
+    /*
+	 A button sends a value "1" when pressed (in the web page),
+	 and zero when released.
+    */
+    WebPages->addButton("prev", actionProc, HTML_BUTPREV);
+    WebPages->addButton("next", actionProc, HTML_BUTNEXT);
+    WebPages->addButton("reboot", actionProc, HTML_REBOOTESP32);
 }
 
 void setup()
@@ -334,8 +419,7 @@ void setup()
   uint8_t nb = get_nvram_brightness();
   if (nb) {
     Serial.printf("Replacing default brightness %d with NVRAM saved brightness %d\n\r", matrix_brightness, nb);
-    matrix_brightness = nb;
-    matrix->setBrightness(nb);
+    change_brightness(nb);
   } else {
     Serial.printf("Mo brightness saved in NVRAM, using neomatrix_config.h default of %d\n\r", matrix_brightness);
     Serial.printf("Use 'b' to change brightness and 'B' to save to NVRAM\n\r");
@@ -347,7 +431,7 @@ void setup()
 
   // Do not init wifi before matrix_setup since wifi has callbacks that display on matrix
   #ifdef WIFI_HOSTNAME
-    wifi_setup(NULL, on_ota_start, on_wifi_connect);
+    wifi_setup(rebuild_main_page_local, on_ota_start, on_wifi_connect);
   #endif
 
 #ifdef SHOW_PATTERN_NUM
