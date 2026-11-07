@@ -213,7 +213,7 @@ extern void on_wifi_connect();
 
 void newpattern()//generates all the randomness for each new pattern
 {
-  int16_t new_pattern = 0;
+  int64_t new_pattern = 0;
   // Allows keeping a pattern index for selecting bestof patterns
   static uint8_t local_pattern = 0;
 
@@ -231,6 +231,8 @@ void newpattern()//generates all the randomness for each new pattern
     if (new_pattern) {
       Serial.print("Got new pattern via serial ");
       Serial.println(new_pattern);
+      // If we received an IP, we're done
+      if (parse_new_IP(new_pattern)) return;
     } else {
       Serial.print("Got serial char ");
       Serial.println(readchar);
@@ -273,6 +275,8 @@ w => set wifi mode (1: slave, 2: AP, 3: ForceAP)
         if (c < '0' || c > '3') { Serial.printf("%c invalid\r\n", c); break; }
         wifi_master_slave_forceap = c - '0';
 	set_wifi_mode(wifi_master_slave_forceap);
+        Serial.printf("Saving Wifi Mode %d to NVRAM\n\r", wifi_master_slave_forceap);
+	set_nvram_master_slave_forceap(wifi_master_slave_forceap);
       } else {
 	// Serial can come from wifi, so allow it to run
 	wifi_loop();
@@ -384,6 +388,14 @@ w => set wifi mode (1: slave, 2: AP, 3: ForceAP)
   pattern = local_pattern;
 #endif
   if (new_pattern) pattern = new_pattern;
+
+
+#ifdef WIFI_HOSTNAME
+  if (!WIFI_SLAVE_MODE) {
+      String demo_str = String(pattern);
+      send_to_slaves(demo_str.c_str());
+  }
+#endif
 
 #ifdef CLEAR_BETWEEN_PATTERNS
   matrix->clear(); // without clear, some pattern transitions via blending look weird

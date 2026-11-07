@@ -263,9 +263,6 @@ void setup()
   if (MATRIX_WIDTH == MATRIX_HEIGHT) square = true;
   //delay(1500);
   Serial.begin(115200);
-  #ifdef WIFI_HOSTNAME
-    wifi_setup(NULL, on_ota_start, on_wifi_connect);
-  #endif
 
 #ifdef TME_AUDIO
   Serial1.begin(57600);
@@ -326,7 +323,9 @@ void setup()
   digitalWrite(LATCHB, LOW);
 #endif
 
-
+  ////////////////////////////////////////////////////////////////////////////
+  // Matrix Init
+  ////////////////////////////////////////////////////////////////////////////
   // don't re-init the serial port.
   matrix_setup(false);
   Serial.println("Adjusting Brightness, if your panels are powered by USB and things crash before you");
@@ -345,6 +344,11 @@ void setup()
   effects.leds = matrixleds;
   effects.Setup();
   matrix->show();
+
+  // Do not init wifi before matrix_setup since wifi has callbacks that display on matrix
+  #ifdef WIFI_HOSTNAME
+    wifi_setup(NULL, on_ota_start, on_wifi_connect);
+  #endif
 
 #ifdef SHOW_PATTERN_NUM
   // default font is 5x7, this one is 3x5

@@ -85,6 +85,7 @@ String get_hostname() {
 void set_nvram_brightness(const uint8_t brightness) {
     prefs.begin("TME69", false); // Open namespace, false = read/write
     
+    Serial.printf("%%%%%%%%%% saving brightness %d\r\n", brightness);
     prefs.putUChar("brightness", brightness);
     prefs.end();
 }
@@ -104,7 +105,9 @@ uint8_t get_nvram_brightness() {
 void set_nvram_master_slave_forceap(const uint8_t master_slave_forceap) {
     prefs.begin("TME69", false); // Open namespace, false = read/write
     
-    prefs.putUChar("master_slave_forceap", master_slave_forceap);
+    // key length must be 15 chars or less
+    Serial.printf("%%%%%%%%%% saving msforceap %d\r\n", master_slave_forceap);
+    prefs.putUChar("msforceap", master_slave_forceap);
     prefs.end();
 }
 
@@ -113,7 +116,7 @@ uint8_t get_nvram_master_slave_forceap() {
     
     // Read the key. The second argument (0) is the default value 
     // returned if the key does not exist yet (e.g., first boot).
-    uint8_t master_slave_forceap = prefs.getUChar("master_slave_forceap", 0);
+    uint8_t master_slave_forceap = prefs.getUChar("msforceap", 0);
     
     prefs.end();
     
@@ -432,11 +435,11 @@ void configure_short_dhcp_lease() {
     if (ap_netif) {
 	esp_netif_dhcps_stop(ap_netif);
 	
-	uint32_t lease_time = 5; 
+	uint32_t lease_time = 20; 
 	esp_netif_dhcps_option(ap_netif, ESP_NETIF_OP_SET, ESP_NETIF_IP_ADDRESS_LEASE_TIME, &lease_time, sizeof(lease_time));
 	
 	esp_netif_dhcps_start(ap_netif);
-	Serial.println(">>>>>>>>>> [DHCP SERVER] Lease time configured to 5 minutes <<<<<<<");
+	Serial.println(">>>>>>>>>> [DHCP SERVER] Lease time configured to 20 minutes <<<<<<<");
     }
 }
 
@@ -676,6 +679,75 @@ void listen_for_master_broadcast() {
             }
         }
     }
+}
+
+void send_to_slaves(const char *str) {
+	if (slave_ip_count > 0) {
+	//#define MS_TCP_UPDATES
+	#ifdef MS_TCP_UPDATES
+	    uint8_t last_idx = slave_ip_count - 1;
+	    WiFiClient slaveClient;
+	    if (slaveClient.connect(Slave_IPs[last_idx], 23, 200)) {
+		Serial.printf("Sending %s to %s via TCP\n\r", str, Slave_IPs[last_idx].toString().c_str());
+		// Send the raw ASCII pattern number. The slave's IR_Serial_Handler 
+		// loop will pick it up as digits and load it into new_pattern
+		slaveClient.print(str);
+		slaveClient.clear();
+		// Give enough time for the full data to go through before we tear down the connection
+		delay(300);
+		slaveClient.stop();
+	    }
+	#else
+	    NetworkUDP udpMaster;
+	    for (uint8_t i = 0; i < slave_ip_count; i++) {
+		if (udpMaster.beginPacket(Slave_IPs[i], 23)) {
+		    Serial.printf("Sending %s to %s via UDP\n\r", str, Slave_IPs[i].toString().c_str());
+		    udpMaster.println(str); // Send the pattern digits with a newline delimiter
+		    udpMaster.endPacket();
+		}
+	    }
+	#endif
+    } else {
+	Serial.printf("Wifi Master, but slave unknown, so cannot send pattern change\n\r");
+    }
+}
+
+uint8_t parse_new_IP(uint64_t received_pattern) {
+    uint32_t ip_part = (uint32_t)(received_pattern & 0xFFFFFFFF);
+    uint8_t octet1 = (ip_part & 0xFF000000) / 0x1000000;
+    uint8_t octet2 = (ip_part & 0x00FF0000) / 0x10000;
+    uint8_t octet3 = (ip_part & 0x0000FF00) / 0x100;
+    uint8_t octet4 = (ip_part & 0x000000FF) / 1;
+
+    if (received_pattern >= 0x100000000ULL) {
+	// Clear the 3rd bit to revert back to 192.x.x.x
+	octet1 &= ~0x20; 
+	IPAddress incoming_ip(octet1, octet2, octet3, octet4);
+	
+	bool known = false;
+	for (uint8_t i = 0; i < slave_ip_count; i++) {
+	    if (Slave_IPs[i] == incoming_ip) {
+		known = true;
+		break;
+	    }
+	}
+	
+	if (!known) {
+	    if (slave_ip_count < MAX_SLAVES) {
+		Slave_IPs[slave_ip_count++] = incoming_ip;
+	    } else {
+		// Shift array left to enforce FIFO limit, dropping oldest IP
+		for (uint8_t i = 1; i < MAX_SLAVES; i++) {
+		    Slave_IPs[i - 1] = Slave_IPs[i];
+		}
+		Slave_IPs[MAX_SLAVES - 1] = incoming_ip;
+	    }
+	    Serial.print(">>>>>>>>>>>>>>>> ESP32 Master received and stored new Slave IP: ");
+	    Serial.println(incoming_ip.toString().c_str());
+	}
+	return 1;
+    }
+    return 0;
 }
 
 
@@ -972,10 +1044,14 @@ void wifi_setup(void (*main_page_callback)() = nullptr, void (*ota_start_callbac
 
   // Wi-Fi Event Callbacks
   WiFi.onEvent([_wifi_connect_callback](WiFiEvent_t event, WiFiEventInfo_t info) {
-    Serial.printf("\n[WiFi] Connected! IP: %s | Hostname: %s.local | Telnet ready port %d (use nc, not telnet)\n", 
-                  WiFi.localIP().toString().c_str(), 
+    Serial.printf("\n[WiFi] Connected! IP: %s | Hostname: %s.local | Telnet ready port %d (use nc, not telnet)\n",
+                  WiFi.localIP().toString().c_str(),
                   get_hostname().c_str(), TELNET_PORT);
-		  _wifi_connect_callback();
+
+		  slave_ip_sent = false;
+		  send_slave_ip_to_master_tries = 0;
+		  send_slave_ip_to_master();
+		  if (_wifi_connect_callback) _wifi_connect_callback();
   }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
   WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -1011,7 +1087,7 @@ void wifi_setup(void (*main_page_callback)() = nullptr, void (*ota_start_callbac
 
   // Enforce 10 clients immediately now that OmWebServer has likely settled
   if (!WIFI_SLAVE_MODE && (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA || WIFI_FORCEAP_MODE)) {
-      Serial.printf("\n>>>>>>>>>> Post-Init: Enforcing %d AP Clients & 5m DHCP Lease <<<<<<<<<<\n", AP_MAX_CLIENTS);
+      Serial.printf("\n>>>>>>>>>> Post-Init: Enforcing %d AP Clients & 20m DHCP Lease <<<<<<<<<<\n", AP_MAX_CLIENTS);
       WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD, WIFI_AP_CHANNEL, 0, AP_MAX_CLIENTS);
       configure_short_dhcp_lease();
   }
@@ -1053,6 +1129,18 @@ void wifi_loop() {
   WebServer->tick();
 
   listen_for_master_broadcast(); // Slave reads this continuously
+
+  // If DHCP ever changes our IP while connected, immediately notify Master
+  if (WIFI_SLAVE_MODE && wifi_network_stable && WiFi.status() == WL_CONNECTED) {
+      static IPAddress lastKnownLocalIP(0, 0, 0, 0);
+      IPAddress currentIP = WiFi.localIP();
+      if (currentIP != lastKnownLocalIP && (uint32_t)currentIP != 0) {
+          lastKnownLocalIP = currentIP;
+          slave_ip_sent = false;
+          send_slave_ip_to_master_tries = 0;
+          send_slave_ip_to_master();
+      }
+  }
   
   EVERY_N_SECONDS(5) {
       broadcast_master_presence(); // Master broadcasts presence
