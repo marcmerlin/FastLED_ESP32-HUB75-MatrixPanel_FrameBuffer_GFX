@@ -334,14 +334,6 @@ void rebuild_main_page_local() {
 
 void setup()
 {
-#if 0
-#ifdef BESTPATTERNS
-  if (BIGGER <= 128){
-    bestpatterns[3] = 168;
-    bestpatterns[7]=175;
-    }
-#endif
-#endif
   x = random16();
   y = random16();
   z = random16();

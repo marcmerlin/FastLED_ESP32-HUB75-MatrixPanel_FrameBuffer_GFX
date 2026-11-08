@@ -301,10 +301,7 @@ w => set wifi mode (1: slave, 2: AP, 3: ForceAP)
       }
     }
 
-    //Serial.printf("Received new brightness %s, saving in flash\r\n", newbrightness.c_str());
-    Serial.printf("Received new brightness %d. Use 'B' to save to flash\r\n", newbrightness);
-    matrix->setBrightness(newbrightness);
-    matrix_brightness = newbrightness;
+    change_brightness(newbrightness);
   }
   else if (readchar == 'B') {
     Serial.printf("Saving Current Brightness To Flash: %d\r\n", matrix_brightness);
