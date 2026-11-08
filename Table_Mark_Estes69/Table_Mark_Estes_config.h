@@ -86,6 +86,10 @@ uint8_t bestpatterns[] = {
 #undef TME_AUDIO
 #endif
 
+// Runs on any board using the arduino-pico core (RP2040, RP2350A, RP2350B)#ifdef ARDUINO_ARCH_RP2040
+#undef TME_AUDIO
+#endif
+
 // Don't load non existent EasyTransfer for platforms without audio
 #ifdef TME_AUDIO
 #include <EasyTransfer.h>// used for exchange with 2nd arduino for audio processing
