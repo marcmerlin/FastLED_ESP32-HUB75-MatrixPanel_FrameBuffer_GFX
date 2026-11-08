@@ -86,7 +86,8 @@ uint8_t bestpatterns[] = {
 #undef TME_AUDIO
 #endif
 
-// Runs on any board using the arduino-pico core (RP2040, RP2350A, RP2350B)#ifdef ARDUINO_ARCH_RP2040
+// Runs on any board using the arduino-pico core (RP2040, RP2350A, RP2350B)
+#ifdef ARDUINO_ARCH_RP2040
 #undef TME_AUDIO
 #endif
 
