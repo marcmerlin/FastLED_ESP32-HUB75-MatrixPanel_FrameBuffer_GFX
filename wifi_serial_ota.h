@@ -1200,6 +1200,4 @@ void wifi_loop() {
 // End of WIFI
 // ###########################################################################################
 
-void rebootESP32() { ESP.restart(); }
-
 #endif // WIFI_SERIAL_OTA_H

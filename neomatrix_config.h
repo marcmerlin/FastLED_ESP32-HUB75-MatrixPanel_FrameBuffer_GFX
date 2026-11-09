@@ -1408,6 +1408,9 @@ void *mallocordie(const char *varname, uint32_t req, bool psram=true) {
     return NULL;
 }
 
+void(* rebootFunc) (void) = 0; // jump to 0 to cause a sofware reboot
+void rebootESP32() { ESP.restart(); } // nicer ESP32 specific reboot
+
 uint32_t millisdiff(uint32_t before) {
     return((millis()-before) ? (millis()-before): 1);
 }
