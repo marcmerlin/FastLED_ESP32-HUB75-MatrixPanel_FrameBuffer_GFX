@@ -1408,8 +1408,25 @@ void *mallocordie(const char *varname, uint32_t req, bool psram=true) {
     return NULL;
 }
 
-void(* rebootFunc) (void) = 0; // jump to 0 to cause a sofware reboot
-void rebootESP32() { ESP.restart(); } // nicer ESP32 specific reboot
+void reboot() {
+#if defined(ARDUINO_ARCH_RP2040)
+  // Raspberry Pi RP2040 and RP2350
+  rp2040.reboot();
+
+#elif defined(ESP32) || defined(ESP8266)
+  // Espressif chips
+  ESP.restart();
+
+#elif defined(CORE_TEENSY) || defined(__arm__)
+  // Teensy and generic ARM Cortex-M (STM32, SAMD, etc.)
+  NVIC_SystemReset();
+
+#else
+  // Fallback for 8-bit AVR (Arduino Uno, Mega, Nano)
+  void (*resetFunc)(void) = 0;
+  resetFunc();
+#endif
+}
 
 uint32_t millisdiff(uint32_t before) {
     return((millis()-before) ? (millis()-before): 1);

@@ -1,4 +1,3 @@
-
 // Enable LEDMATRIX support in neomatrix_config
 #define LEDMATRIX
 
@@ -7,6 +6,7 @@
 // #define WIFI_PASSWORD "bar"
 // #define WIFI_HOSTNAME screen1
 #if __has_include("wifi_secrets.h")
+    #define WIFI
     #include "wifi_secrets.h"
     #define WIFI_AP_CHANNEL 6
     #ifndef WIFI_HOSTNAME 
@@ -17,6 +17,7 @@
 #endif
 
 #include "neomatrix_config.h"
+//#include "matrixconfig.h"
 #define zeds ledmatrix
 
 #include "Table_Mark_Estes_config.h"
@@ -34,65 +35,41 @@
   #endif
 */
 
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 // Aurora includes
 #include "matrix.h"
-#include "Effects.h"
 #include "Drawable.h"
 #include "Boid.h"
 #include "Attractor.h"
 #include "Geometry.h"
 #include "PatternAttract.h"
-PatternAttract attract;
 #include "PatternBounce.h"
-PatternBounce bounce;
 #include "PatternCube.h"
-PatternCube cube;
 #include "PatternFlock.h"
-PatternFlock aflock;
 #include "PatternFlowField.h"
-PatternFlowField flowfield;
 #include "PatternIncrementalDrift.h"
-PatternIncrementalDrift incrementaldrift;
 #include "PatternIncrementalDrift2.h"
-PatternIncrementalDrift2 incrementaldrift2;
 #include "PatternPendulumWave.h"
-PatternPendulumWave pendulumwave;
 #include "PatternRadar.h"
-PatternRadar radar;
 #include "PatternSpiral.h"
-PatternSpiral spiral;
 #include "PatternSpiro.h"
-PatternSpiro spiro;
 #include "PatternSwirl.h"
-PatternSwirl swirl;
 #include "PatternWave.h"
-PatternWave wave;
 #pragma GCC diagnostic pop
 
+extern Effects *effects_ptr;
+#define effects (*effects_ptr)
 
-AuroraDrawable* items[] = {
-  &attract,//0
-  &bounce,//1
-  &cube,//2
-  &aflock,//3
-  &flowfield,//4
-  &incrementaldrift,//5
-  &incrementaldrift2,//6
-  &pendulumwave,//7
-  &cube,//8  was radar
-  &spiral,//9
-  &spiro,//10
-  &swirl,//11
-  &wave,//12
-};
+AuroraDrawable* items[13];
 AuroraDrawable *patternz;
+
 
 // no-op for now, need to write code
 bool DEMO_BESTOF = true;
 
-int8_t item = random(13);
+int8_t item = 0; // random(13);  cannot use random at global scope on RP2040
 
 #define MIDLX               (MATRIX_WIDTH/2)
 #define MIDLY               (MATRIX_HEIGHT/2)
@@ -121,8 +98,11 @@ int16_t RC1, RC2, RC3, dot4 = 5, dot2 = 6,  dot3 = 1, phew, lender = 128, xsizer
 uint8_t  whichone = 2, regen = 0, mstep, LLaudio[MAXBIG], RRaudio[MAXBIG], fpeed[MAXBIG], fcolor[MAXBIG], fcountr[MAXBIG];
 
 uint16_t raad, howmany, xhowmany, how, velo = 30 , pointyfix = 4;
-float scalerW = MATRIX_WIDTH / 64.0;
-float scalerH = MATRIX_HEIGHT / 64.0;
+//float scalerW = MATRIX_WIDTH / 64.0;   // floating point is illegal at global scope on RP2040
+//float scalerH = MATRIX_HEIGHT / 64.0;
+// moved to setup
+float scalerW = 1;
+float scalerH = 1;
 
 int8_t zoomer = 1, bigmax, directn = 1, quash = 5, quiet = 0 ;
 uint16_t  counter, ringdelay, bringdelay, firedelay, hitcounter, waiter = 7;
@@ -146,15 +126,23 @@ static uint16_t x;
 static uint16_t y;
 static uint16_t z;
 uint8_t noise[BIGGER][BIGGER];
-CRGBPalette16 currentPalette( PartyColors_p );
+
+// gemini says copying this at global scope is unsafe on RP2040, moved to setup
+//CRGBPalette16 currentPalette( PartyColors_p );
+CRGBPalette16 currentPalette;
 uint8_t       colorLoop = 1;
+
+// Define the actual pointer for the Effects macro we added in the header
+Effects *effects_ptr = nullptr;
+
 
 float  mscale = 1.4, fps = 30;
 float radius, xslope[MAXBIG], yslope[MAXBIG], xfire[MAXBIG], yfire[MAXBIG], cangle, sangle;
 float locusx, locusy, driftx, drifty, xcen, ycen, yangle, xangle, eeksangle, whyangle;
-float Gravity = -9.81, RATIO = (MATRIX_HEIGHT + 0.001) / (MATRIX_WIDTH + 0.001);
+// float Gravity = -9.81, RATIO = (MATRIX_HEIGHT + 0.001) / (MATRIX_WIDTH + 0.001);
+float Gravity = -9.81, RATIO = 1;
 float Heighty[BallCount];
-float ImpactVelocityStart = sqrt( -2 * Gravity );
+float ImpactVelocityStart;
 float ImpactVelocity[BallCount];
 float TimeSinceLastBounce[BallCount];
 int16_t   Positiony[BallCount], Positionx[BallCount];
@@ -163,13 +151,11 @@ float Dampening[BallCount];
 CRGBPalette16 thepal;
 CRGB darkcolor;
 CRGB lightcolor;
-char readchar;
+volatile char readchar;
 
 #ifdef SHOW_PATTERN_NUM
 uint8_t print_width = 3;
 #endif
-
-#include "Table_Mark_Estes_Impl.h"
 
 void change_brightness(uint8_t nb) {
     matrix_brightness = nb;
@@ -177,128 +163,123 @@ void change_brightness(uint8_t nb) {
     Serial.printf("Set brightness to %d (not saving to nvram as high brightness can cause a crash loop due to power starvation)\n\r", nb);
 }
 
+#include "Table_Mark_Estes_Impl.h"
 
-// WIFI_HOSTNAME isn't actually used to set hostname anymore now that it's
-// done from NVRAM, but it's still used to gate the WIFI code.
-#ifdef WIFI_HOSTNAME
-
-bool DEMO_PAUSE = false;
-#define HTML_BESTOF	    100
-#define HTML_BRIGHT	    101
-#define HTML_PAUSE	    102
-#define HTML_REBOOTESP32    109
-#define HTML_BUTPREV	    110
-#define HTML_BUTNEXT	    111
-
-void actionProc(const char *pageName, const char *parameterName, int value, int ref1, void *ref2) {
-    static int actionCount = 0;
-    actionCount++;
-    Serial.printf("%4d %s.%s value=0x%08x/%dslider 2 ref1=%d\n", actionCount, pageName, parameterName, value, value, ref1);
-
-    switch (ref1) {
-    case HTML_BUTPREV:
-	if (!value) break;
-	Serial.println("PREVIOUS pressed");
-        readchar = 'p';
-        newpattern();
-	break;
-
-    case HTML_BUTNEXT:
-	if (!value) break;
-	Serial.println("NEXT pressed");
-        readchar = 'n';
-        newpattern();
-	break;
-
-    case HTML_REBOOTESP32:
-	if (!value) break;
-	Serial.println("Reboot ESP32 pressed");
-	rebootESP32();
-	break;
-
-    case HTML_BESTOF:
-	if (!value) break;
-	Serial.print("Bestof: ");
-	Serial.println(value);
-	Serial.println("Write me");
-	break;
-
-    case HTML_BRIGHT:
-	Serial.print("Brightness change to ");
-	Serial.println(value);
-	change_brightness(value);
-	break;
-
-    case HTML_PAUSE:
-        DEMO_PAUSE = value;
-        if (value) {
-            Serial.println("Pausing Demo");
-        } else { 
-            Serial.println("Resuming Demo");
-            readchar = 'n';
-            newpattern();
-        }
-	break;
-    }
-}
-
-
-
-
-void on_ota_start() {
-    Serial.println("\r\nGot OTA - Executing Matrix Shutdown Callback");
-    
-    matrix->fillScreen(0);
-    matrix->setFont(&TomThumb);
-    matrix->setCursor(1, 6);
-    matrix->print("Received OTA\nFlashing...");
-    matrix->show(); 
-    
-    // just long enough to show it but not long enough to stall the OTA
-    delay(1000);
-
-    // 1. MUST blank the screen first to prevent LED burn-in!
-    matrix->fillScreen(0);
-    matrix->show(); 
-
-    // 2. Allow one full frame to clock out to the hardware
-    delay(50);
-
-    // Shut down the I2S DMA engine to free the memory bus for the SPI flash
-    // Note that this is not absolutely required but flashing is super slow
-    // if the I2S DMA keeps running.
-    if (hub75matrix) hub75matrix->stopDMAoutput();
-}
 
 volatile uint32_t pause_until_millis = 0;
-
-void on_wifi_connect() {
-    Serial.println("\r\nWifi Callback");
-    
-    // stop the main thread for 3 seconds
-    pause_until_millis = millis() + 3000;
-    matrix->setFont(&TomThumb);
-    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
-        matrix->fillRect(0, 0, 64, 14, 0);
-        matrix->setTextColor(matrix->Color(255,0,0));
-        matrix->setCursor(0, 6);
-        matrix->print(String(">>>> AP MODE <<<<"));
-        matrix->setCursor(0, 13);
-        matrix->print(String("> ") + WiFi.softAPIP().toString().c_str() + " <");
-        matrix->fillRect(0, 64-7, 64, 7, 0);
-        matrix->setCursor(0, 63);
-        matrix->setTextColor(matrix->Color(255,255,0));
-        matrix->print(String(">>>> AP MODE <<<<"));
-    } else {
-        matrix->fillRect(0, 0, 64, 7, 0);
-        matrix->setTextColor(matrix->Color(0,255,0));
-        matrix->setCursor(0, 6);
-        matrix->print(String("> ") + WiFi.localIP().toString().c_str() + " <");
-    }
-    matrix->setTextColor(matrix->Color(255,255,255));
-    matrix->show(); 
-}
-#endif
+#ifdef WIFI
+  bool DEMO_PAUSE = false;
+  #define HTML_BESTOF	    100
+  #define HTML_BRIGHT	    101
+  #define HTML_PAUSE	    102
+  #define HTML_REBOOTESP32  109
+  #define HTML_BUTPREV	    110
+  #define HTML_BUTNEXT	    111
+  
+  void actionProc(const char *pageName, const char *parameterName, int value, int ref1, void *ref2) {
+      static int actionCount = 0;
+      actionCount++;
+      Serial.printf("%4d %s.%s value=0x%08x/%dslider 2 ref1=%d\n", actionCount, pageName, parameterName, value, value, ref1);
+  
+      switch (ref1) {
+      case HTML_BUTPREV:
+  	if (!value) break;
+  	Serial.println("PREVIOUS pressed");
+          readchar = 'p';
+          newpattern();
+  	break;
+  
+      case HTML_BUTNEXT:
+  	if (!value) break;
+  	Serial.println("NEXT pressed");
+          readchar = 'n';
+          newpattern();
+  	break;
+  
+      case HTML_REBOOTESP32:
+  	if (!value) break;
+  	Serial.println("Reboot ESP32 pressed");
+  	reboot();
+  	break;
+  
+      case HTML_BESTOF:
+  	if (!value) break;
+  	Serial.print("Bestof: ");
+  	Serial.println(value);
+  	Serial.println("Write me");
+  	break;
+  
+      case HTML_BRIGHT:
+  	Serial.print("Brightness change to ");
+  	Serial.println(value);
+  	change_brightness(value);
+  	break;
+  
+      case HTML_PAUSE:
+          DEMO_PAUSE = value;
+          if (value) {
+              Serial.println("Pausing Demo");
+          } else { 
+              Serial.println("Resuming Demo");
+              readchar = 'n';
+              newpattern();
+          }
+  	break;
+      }
+  }
+  
+  void on_ota_start() {
+      Serial.println("\r\nGot OTA - Executing Matrix Shutdown Callback");
+      
+      matrix->fillScreen(0);
+      matrix->setFont(&TomThumb);
+      matrix->setCursor(1, 6);
+      matrix->print("Received OTA\nFlashing...");
+      matrix->show(); 
+      
+      // just long enough to show it but not long enough to stall the OTA
+      delay(1000);
+  
+      // 1. MUST blank the screen first to prevent LED burn-in!
+      matrix->fillScreen(0);
+      matrix->show(); 
+  
+      // 2. Allow one full frame to clock out to the hardware
+      delay(50);
+  
+      // Shut down the I2S DMA engine to free the memory bus for the SPI flash
+      // Note that this is not absolutely required but flashing is super slow
+      // if the I2S DMA keeps running.
+      if (hub75matrix) hub75matrix->stopDMAoutput();
+  }
+  
+  void on_wifi_connect() {
+      Serial.println("\r\nWifi Callback");
+      
+      // stop the main thread for 3 seconds
+      pause_until_millis = millis() + 3000;
+      matrix->setFont(&TomThumb);
+      if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
+          matrix->fillRect(0, 0, 64, 14, 0);
+          matrix->setTextColor(matrix->Color(255,0,0));
+          matrix->setCursor(0, 6);
+          matrix->print(String(">>>> AP MODE <<<<"));
+          matrix->setCursor(0, 13);
+          matrix->print(String("> ") + WiFi.softAPIP().toString().c_str() + " <");
+          matrix->fillRect(0, 64-7, 64, 7, 0);
+          matrix->setCursor(0, 63);
+          matrix->setTextColor(matrix->Color(255,255,0));
+          matrix->print(String(">>>> AP MODE <<<<"));
+      } else {
+          matrix->fillRect(0, 0, 64, 7, 0);
+          matrix->setTextColor(matrix->Color(0,255,0));
+          matrix->setCursor(0, 6);
+          matrix->print(String("> ") + WiFi.localIP().toString().c_str() + " <");
+      }
+      matrix->setTextColor(matrix->Color(255,255,255));
+      matrix->show(); 
+  }
+#endif // WIFI
 
 void display_hostname() {
   matrix->fillRect(0, 64-7*3, 64, 21, 0);
@@ -311,14 +292,17 @@ void display_hostname() {
   matrix->setTextColor(matrix->Color(0,255,0));
   matrix->println(WIFI_HOSTNAME);
 #endif
+#ifdef WIFI
   matrix->setTextColor(matrix->Color(0, 0,255));
   matrix->println(get_hostname().c_str());
+#endif
   matrix->show(); 
   matrix->setTextColor(matrix->Color(255,255,255));
   // stop the main thread for 3 seconds
   pause_until_millis = millis() + 3000;
 }
 
+#ifdef WIFI
 void rebuild_main_page_local() {
     WebPages->addSlider(0, 1, "Bestof Demos Only", actionProc, DEMO_BESTOF, HTML_BESTOF);
     WebPages->addSlider(0, 1, "Pause on Demo", actionProc, DEMO_PAUSE, HTML_PAUSE);
@@ -331,15 +315,99 @@ void rebuild_main_page_local() {
     WebPages->addButton("next", actionProc, HTML_BUTNEXT);
     WebPages->addButton("reboot", actionProc, HTML_REBOOTESP32);
 }
+#endif
 
 void setup()
 {
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Matrix Init
+  ////////////////////////////////////////////////////////////////////////////
+  // 1. Initialize serial port
+  // Note that the serial port is likely starved by Protomatter, so most serial
+  // is lost. TODO: move Protomatter to setup1() and loop1()
+  Serial.begin(115200);
+  
+  // 2. Allow up to 4 seconds for Linux host CDC-ACM enumeration
+  uint32_t t0 = millis();
+  while (!Serial && (millis() - t0 < 4000)) {
+    delay(500);
+    Serial.println("Priming Serial (especially for RP2xxx chips)");
+    Serial.flush();
+  }
+
+  // this is dirty but needed. On RP2350, Serial returns ok, but the end to 
+  // end connection isn't working and the boot messages are lost without this
+  delay(1000);
+
+  Serial.println("\n\n============================================");
+  Serial.println("     HARDWARE BOOT OK: Entering setup()");
+  Serial.println("============================================");
+  Serial.flush();
+
+  // 3. Initialize matrix and memory
+  matrix_setup(false);
+  Serial.println(">> matrix_setup() completed successfully.");
+  Serial.flush();
+
+  // 4. Visual Test: Draw 3 distinct colored stripes across the 64x64 panel
+  // to confirm bitplane DMA and shift register timing are active.
+  matrix->fillScreen(0);
+  matrix->fillRect(0,  0, 64, 16, matrix->Color(255, 0, 0));   // Red top
+  matrix->fillRect(0, 16, 64, 16, matrix->Color(0, 255, 0));   // Green middle
+  matrix->fillRect(0, 32, 64, 16, matrix->Color(0, 0, 255));   // Blue bottom
+  matrix->show();
+  // Why this? Because, some chips like RP2xxx will fail to get serial working
+  // for a variety of reasons, making it hard to debug
+  // But worse, if any global variables happen to do floating point, or random()
+  // they will simply crash the CPU before setup() gets any chance to even run.
+  // So this is basically a 'hello world' in case serial is busted but the CPU
+  // didn't crash and things fail later.
+
+  Serial.println("Test pattern pushed via matrix->show().");
+  Serial.flush();
+
   x = random16();
   y = random16();
   z = random16();
   if (MATRIX_WIDTH == MATRIX_HEIGHT) square = true;
-  //delay(1500);
-  Serial.begin(115200);
+
+  // RP2040: NOW it is safe to do hardware random and FPU math
+  ImpactVelocityStart = sqrt( -2 * Gravity );
+  item = random(13);
+
+// Safely construct Effects now that hardware is awake
+effects_ptr = new Effects();
+
+  // Construct patterns in permanent memory using 'static'
+  static PatternAttract attract;
+  static PatternBounce bounce;
+  static PatternCube cube;
+  static PatternFlock aflock;
+  static PatternFlowField flowfield;
+  static PatternIncrementalDrift incrementaldrift;
+  static PatternIncrementalDrift2 incrementaldrift2;
+  static PatternPendulumWave pendulumwave;
+  static PatternRadar radar;
+  static PatternSpiral spiral;
+  static PatternSpiro spiro;
+  static PatternSwirl swirl;
+  static PatternWave wave;
+
+  // Bind their addresses to the global items array
+  items[0] = &attract;
+  items[1] = &bounce;
+  items[2] = &cube;
+  items[3] = &aflock;
+  items[4] = &flowfield;
+  items[5] = &incrementaldrift;
+  items[6] = &incrementaldrift2;
+  items[7] = &pendulumwave;
+  items[8] = &cube; // (was radar)
+  items[9] = &spiral;
+  items[10] = &spiro;
+  items[11] = &swirl;
+  items[12] = &wave;
 
 #ifdef TME_AUDIO
   Serial1.begin(57600);
@@ -350,16 +418,6 @@ void setup()
   digitalWrite(LATCHA, LOW);    // sets the audio module hardware to off
   pinMode(LATCHB, OUTPUT);
   digitalWrite(LATCHB, LOW);
-#endif
-
-#if 0
-  Serial.println("Reset");
-  Serial.println("scalerW, iscalerW");
-  Serial.println(scalerW);
-  Serial.println(iscalerW);
-  Serial.println("scalerH, iscalerH");
-  Serial.println(scalerH);
-  Serial.println(iscalerH);
 #endif
 
   driftx = random(3, MATRIX_WIDTH - 4);//set an initial location for the animation center
@@ -400,14 +458,14 @@ void setup()
   digitalWrite(LATCHB, LOW);
 #endif
 
-  ////////////////////////////////////////////////////////////////////////////
-  // Matrix Init
-  ////////////////////////////////////////////////////////////////////////////
-  // don't re-init the serial port.
-  matrix_setup(false);
+  // Safely initialize globals now that crt0 is done and XIP/FPU are active
+  scalerW = MATRIX_WIDTH / 64.0;
+  scalerH = MATRIX_HEIGHT / 64.0;
+  currentPalette = PartyColors_p;
+
+#ifdef NVRAM
   Serial.println("Adjusting Brightness, if your panels are powered by USB and things crash before you");
   Serial.println("can reset it with b and B, unplug power to your panels to allow boot and adjustments");
-
   uint8_t nb = get_nvram_brightness();
   if (nb) {
     Serial.printf("Replacing default brightness %d with NVRAM saved brightness %d\n\r", matrix_brightness, nb);
@@ -416,57 +474,35 @@ void setup()
     Serial.printf("Mo brightness saved in NVRAM, using neomatrix_config.h default of %d\n\r", matrix_brightness);
     Serial.printf("Use 'b' to change brightness and 'B' to save to NVRAM\n\r");
   }
+#endif
 
   effects.leds = matrixleds;
   effects.Setup();
-  matrix->show();
 
   // Do not init wifi before matrix_setup since wifi has callbacks that display on matrix
-  #ifdef WIFI_HOSTNAME
+  #ifdef WIFI
     wifi_setup(rebuild_main_page_local, on_ota_start, on_wifi_connect);
   #endif
 
-#ifdef SHOW_PATTERN_NUM
-  // default font is 5x7, this one is 3x5
-  matrix->setFont(&TomThumb);
-#endif
-  // Disable showing FPS on serial port in Framebuffer_GFX, but compute it
-#ifdef DISPLAY_FPS
-  matrix->setfpsfreq(0);
-#endif
-
-
   display_hostname();
+  matrix->show();
 }
 
-void marc_overlay() {
-  matrix->fillRect(0, 0, 64, 8, 0);
-  // Reset to default adafruit font, that font wants cursor at top left corner
-  matrix->setFont();
-  matrix->setCursor(0, 0);
-  matrix->setTextColor(matrix->Color(0,255,0));
-  matrix->print("Marc");
-  matrix->setCursor(28, 0);
-  matrix->setTextColor(matrix->Color(0,0,255));
-  matrix->print("MERLIN");
-  matrix->fillRect(0, 55, 64, 9, 0);
-  matrix->setCursor(0, 56);
-  matrix->setTextColor(matrix->Color(255,255,0));
-  matrix->print("SuperCon");
-  matrix->setCursor(51, 56);
-  matrix->setTextColor(matrix->Color(255,0,0));
-  matrix->print("26");
-}
-
+// void local_overlay() {}
+// defined here
+#include "local_overlay.h"
 
 void loop()
 {
-  wifi_loop();
+  #ifdef WIFI
+    wifi_loop();
+  #endif
   if (millis() < pause_until_millis) {
     delay(100);
     EVERY_N_SECONDS(1) Serial.println("Pausing main loop to show other thread output");
     return;
   }
+
 
   hue += 1;//increment the color basis
   h = hue;  //set h to the color basis
@@ -500,9 +536,36 @@ void loop()
   counter++;//increment the counter which is used for many things
   // spititout();//map the 2d screen to the 8 outpus and push them out on my other matrix, not used here
 
-  marc_overlay();
+  local_overlay();
 
+  uint16_t update_freq = matrix->fps();
+#ifdef SHOW_PATTERN_NUM
+  // Make dark overlay for the white font to be visible
+  matrix->fillRect(0, 0, 4 * print_width, 7, 0);
+  matrix->setFont(&TomThumb);
+  matrix->setCursor(0, 6);
+  matrix->setTextColor(matrix->Color(255,255,255));
+  matrix->print(pattern);
+#endif
+#ifdef DISPLAY_FPS
+  // Make dark overlay for the white font to be visible
+  matrix->fillRect(MATRIX_WIDTH - 1 - 4 * 3, 0, 4 * 3 + 1, 7, 0);
+  matrix->setFont(&TomThumb);
+  matrix->setCursor(MATRIX_WIDTH - 4 * 3, 6);
+  matrix->setTextColor(matrix->Color(255,255,255));
+  matrix->print(update_freq);
+#endif
+
+  EVERY_N_SECONDS(30) {
+    // On RP2350, demo 82 at 64x64 updates at 7 to 10 fps (TODO move RGBPanel ISR to 2nd core)
+    Serial.printf("\r\nFramebuffer::GFX fps: %d\r\n", update_freq);
+    // 64x64 on RP2350 at 125Mhz is 224 FPS
+    #ifdef ARDUINO_ARCH_RP2040
+        Serial.printf(">>>> Panel FPS: %d <<<<\r\n", matrix->backend_fps());
+    #endif
+  }
   matrix->show();
+
   delay(waiter);//frame rate control
   if (Serial.available()) readchar = Serial.read(); else readchar = 0;
   if (readchar > 31 || millis() > lastmilly + dwell || nextsong) //when to change patterns
@@ -525,5 +588,4 @@ void loop()
       regenpattern();
     }
   }
-
 }

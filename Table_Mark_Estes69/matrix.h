@@ -15,6 +15,8 @@ const byte MATRIX_CENTRE_X = MATRIX_CENTER_X - 1;
 const byte MATRIX_CENTRE_Y = MATRIX_CENTER_Y - 1;
 
 #include "Effects.h"
-Effects effects;
+// Effects effects; //this will crash RP2040 because of globals
+extern Effects *effects_ptr;
+#define effects (*effects_ptr)
 
 #endif
