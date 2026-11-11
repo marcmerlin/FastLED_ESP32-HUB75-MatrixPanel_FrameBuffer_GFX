@@ -18,7 +18,7 @@ You need
 - https://github.com/marcmerlin/Framebuffer_GFX (framebuffer that everything goes to)
 - https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA base hardware driver
 - https://github.com/adafruit/Adafruit-GFX-Library 2D API
-- https://github.com/FastLED/FastLED another 1D/2D API used by some demos
+- https://github.com/FastLED/FastLED another 1D/2D API used by some demosand used for base RGB888 matrix storage class
 - https://github.com/marcmerlin/LEDMatrix (optional, it's an added 2D API) that runs on top of Framebuffer
 
 How to use?
