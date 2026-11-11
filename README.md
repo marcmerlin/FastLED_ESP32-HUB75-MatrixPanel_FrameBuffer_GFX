@@ -7,10 +7,18 @@ trio of APIs: FastLED, Adafruit::GFX (via Adafruit::NeoMatrix compatibility usin
 and LEDMatrix compatibility too. To get example demo code, go to:
 https://github.com/marcmerlin/FastLED_NeoMatrix_SmartMatrix_LEDMatrix_GFX_Demos
 
-Here is a video demo of a 24bpp framebuffer based set of demos that simply can't run on ESP32-HUB75-MatrixPanel-DMA without this framebuffer driver:
-https://www.youtube.com/watch?v=1d6U-6twpCk
+Here is a video demo of a 24bpp framebuffer based set of demos that simply can't run on Adafruit_Protomatter without this framebuffer driver: https://www.youtube.com/watch?v=1d6U-6twpCk  (click for video)
+<a href="https://www.youtube.com/watch?v=1d6U-6twpCk">
 <img width="1134" height="769" alt="image" src="https://github.com/user-attachments/assets/c54aeab8-d9fd-4c9c-8e2e-fb816df0eec1" />
+</a>
 
+On top of many many other backends supported, with this driver you can switch back and forth between ESP32S3 like Adafruit ESP32-S3 MatrixPortal and RP2350 like Interstate 75W RGBPanel board. They look so similar, but trust me the driver code is not similar at all!  However with this library, you get not to care as it's abstracted away for you: 
+https://youtu.be/iTXz6gqB7NY (click for video)
+<a href="https://youtu.be/iTXz6gqB7NY">
+<img width="1128" height="726" alt="image" src="https://github.com/user-attachments/assets/4b1dfe4a-6d7a-4e19-b637-9f860eb5f414" />
+</a>
+
+<img width="1495" height="752" alt="image" src="https://github.com/user-attachments/assets/335f390d-089e-49fe-8035-333eec47367d" />
 
 Installation
 ------------
@@ -64,7 +72,7 @@ rpi-rgb-led-matrix - FastLED_RPIRGBPanel_GFX ---/   LEDMatrix (optional)   `LEDM
 ArduinoOnPC X11/linux - FastLED_TFTWrapper_GFX /
 FastLED_SDL (linux)   -  FastLED_NeoMatrix   -/
 ```
-Other examples FastLED Matrix vs SmartMatrix matrix, still runnign the same code: 
+Other examples FastLED Matrix vs SmartMatrix matrix, still running the same code: 
 <img width="1024" height="768" alt="image" src="https://github.com/user-attachments/assets/63b2daf4-1c63-42b5-aec7-3412aab30cf1" />
 
 And a 3 panel smartmatrix vs a tiny TFT of the exact same 96x64 resolution, both running the same code:
@@ -82,6 +90,4 @@ So the same code can run on these bigger displays (those run with rpi-rgb-panel)
 ![PXL_20260103_193506810](https://github.com/user-attachments/assets/fe9e9d5b-0362-48f5-aadf-e00f8004828f)  
 https://youtu.be/MRRJw-Khkh0 
 
-And one more reminder of how awesome it is to be able to compile your arduino code on linux, run it on linux
-with full display, and debug it on linux with gdb and ASAN to find your memory leaks and dangling pointers. You
-get this for free by using FrameBuffer::GFX for all your code.
+And one more reminder of how awesome it is to be able to compile your arduino code on linux, run it on linux with full display, and debug it on linux with gdb and ASAN to find your memory leaks and dangling pointers. You get this for free by using FrameBuffer::GFX for all your code.
