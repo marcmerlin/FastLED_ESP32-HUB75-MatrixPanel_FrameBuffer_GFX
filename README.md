@@ -46,9 +46,11 @@ What you get is this:
 ```
 Low Level Drv|Glue Driver for FrameBuffer::GFX
 FastLED     - FastLED_NeoMatrix  -------------\     FastLED CRGB Array 
-ESP32-HUB75-MatrixPanel -,                      |
-FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX
-SmartMatrix - SmartMatrix_GFX -----------------\    24bit FB storage        API Support
+Adafruit_Protomatter vv                        \
+   FastLED_Protomatter_RGBPanel_FrameBuffer_GFX-|
+ESP32-HUB75-MatrixPanel vvv                     |
+FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX-|
+SmartMatrix - SmartMatrix_GFX ------------------|   24bit FB storage        API Support
                                                 \   CRGB methods like
 AF:ILI9341-\                                     \  scale8/fadeToBlackBy
 AF:SSD1331  |--- FastLED_ArduinoGFX_TFT ----------|        |               ,FastLED API
