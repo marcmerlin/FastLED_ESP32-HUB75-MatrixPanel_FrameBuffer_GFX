@@ -557,7 +557,8 @@ void loop()
 #endif
 
   EVERY_N_SECONDS(30) {
-    // On RP2350, demo 82 at 64x64 updates at 7 to 10 fps (TODO move RGBPanel ISR to 2nd core)
+    // On RP2350 at 125Mhz, demo 82 at 64x64 updates at 7-10 fps (TODO move RGBPanel ISR to 2nd core)
+    // On ESP32S3 @ 240Mhz, demo 82 at 64x64 updates at 7-10 fps (TODO move RGBPanel ISR to 2nd core)
     Serial.printf("\r\nFramebuffer::GFX fps: %d\r\n", update_freq);
     // 64x64 on RP2350 at 125Mhz is 224 FPS
     #ifdef ARDUINO_ARCH_RP2040
