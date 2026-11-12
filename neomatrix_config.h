@@ -23,6 +23,8 @@ Backends you should choose from (define 1):
 - ST7735_128b160
 - ST7735_128b128
 - SSD1331 (96x64 TFT)
+- ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64 (or anything ESP32_HUB75_MATRIXPANEL)
+- RP2XXX_HUB75_INTERSTATE75W_64BY64 (or anything RP2XXX_HUB75_PROTOMATTER)
 - Everything below is NeoMatrix in different patterns:
   M24BY24 M32BY8X3 M16BY16T4 M64BY64 are 4 examples of NEOMATRIX defines
   (3 tiled 32x8, 4 tiled 16x16, and a single zigzag 64x64 array)
@@ -65,6 +67,8 @@ to use, set the define before you include the file.
 
 // But let's allow a custom include here that can contain a single line like
 // #define ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64
+// or
+// #define RP2XXX_HUB75_INTERSTATE75W_64BY64
 #if __has_include("neomatrix_config_whichdefine.h")
     #include "neomatrix_config_whichdefine.h"
 #endif
@@ -545,14 +549,15 @@ uint32_t tft_spi_speed;
 
 
 //----------------------------------------------------------------------------
-// mapping2 is a placeholder to show you what's common to the lib and pin definitions
 #elif defined(ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64) || defined(ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64Y32X2)
     // This impacts ESP32-HUB75-MatrixPanel-I2S-DMA.h. Lower bits to go faster
     // I get this below for PIXEL_COLOR_DEPTH_BITS = 8:
     // Requested 8 BPP, I2S: 30Mhz, effective bpp to match minimum requested Hz (120): >7<, Panel Refresh: 206hz
     // 206Hz for 7BPP is not bad but Adafruit Protomatter runs at 5BPP, so let's match that
-    // Requested and received BPP: 5, I2S: 30Mhz, minimum requested 120Hz, Panel Refresh: 732Hz (adafruit does 224Hz)
-    #define PIXEL_COLOR_DEPTH_BITS 5
+    // Requested and received BPP: 5, I2S: 30Mhz, minimum requested 120Hz, Panel Refresh: 732Hz 
+    // Requested and received BPP: 4, I2S: 30Mhz, minimum requested 120Hz, Panel Refresh: 1331hz (adafruit does 224Hz)
+
+    #define PIXEL_COLOR_DEPTH_BITS 4
     #include <FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX.h>
     // Common code in matrix_setup() below
     #define ESP32_HUB75_MATRIXPANEL
@@ -684,6 +689,67 @@ uint32_t tft_spi_speed;
     // So we'll call Framebuffer_GFX->newLedsPtr and setvirtdisp to set those pointers correctly
     // Same thing with hub75matrix, which is passed so we can call brightness
     FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX *matrix = new FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX(matrixleds, MATRIX_TILE_WIDTH, MATRIX_TILE_HEIGHT, virtualDisp, hub75matrix);
+//----------------------------------------------------------------------------
+#elif defined(RP2XXX_HUB75_INTERSTATE75W_64BY64) || defined(RP2XXX_HUB75_INTERSTATE75W_PLACEHOLDER)
+    #include <FastLED_Protomatter_RGBPanel_FrameBuffer_GFX.h>
+
+    // Common code in matrix_setup() below
+    #define RP2XXX_HUB75_PROTOMATTER
+
+    uint8_t matrix_brightness = 128;
+
+    #ifdef RP2XXX_HUB75_INTERSTATE75W_64BY64
+        #define WIDTH      64
+        #define HEIGHT     64
+        #define BIT_DEPTH  4 // oh boy, 4 BPP is not much, but it's needed for 224Hz refresh
+        
+        // Hardware pins mapping for Pimoroni Interstate 75 W (RP2350)
+        uint8_t rgbPins[]  = {0, 1, 2, 3, 4, 5};
+        uint8_t addrPins[] = {6, 7, 8, 9, 10}; 
+        uint8_t clockPin   = 11;
+        uint8_t latchPin   = 12;
+        uint8_t oePin      = 13;
+    #elif defined(RP2XXX_HUB75_INTERSTATE75W_PLACEHOLDER)
+        // TODO
+    #else
+        #error "please define pins for new mapping"
+    #endif
+
+    Adafruit_Protomatter *pm_matrix = nullptr;
+
+    /// Please ignore the "TILE" part, for externally managed framebuffers like RGBPanels,
+    /// the resolution is coded here.
+    const uint16_t MATRIX_TILE_WIDTH = 64;
+    const uint16_t MATRIX_TILE_HEIGHT= 64;
+    
+    // and these are used by LEDMatrix for Neopixel Matrices but do not change from 1 for RGBPanels
+    const uint8_t MATRIX_TILE_H     = 1;  // number of matrices arranged horizontally
+    const uint8_t MATRIX_TILE_V     = 1;  // number of matrices arranged vertically
+    
+    // Below is common code for all ESP32_HUB75_MatrixPanel mappings, you shouldn't have to edit it
+    #ifdef LEDMATRIX
+    // Please use https://github.com/marcmerlin/LEDMatrix/ at least as recent as
+    // https://github.com/marcmerlin/LEDMatrix/commit/597ce703e924d45b2e676d6558c4c74a8ebc6991
+    // or https://github.com/Jorgen-VikingGod/LEDMatrix/commit/a11e74c8cd5b933021b6e15eb067280a52691449
+    // zero copy/no malloc code to work.
+        #include <LEDMatrix.h>
+    #endif
+    
+    #ifdef LEDMATRIX
+    // cLEDMatrix creation, don't allocate memory since we will feed it the framebuffer
+    // created by SmartMatrix at runtime ledmatrix(false)
+    cLEDMatrix<MATRIX_TILE_WIDTH, -MATRIX_TILE_HEIGHT, HORIZONTAL_MATRIX,
+        MATRIX_TILE_H, MATRIX_TILE_V, HORIZONTAL_BLOCKS> *ledmatrix_ptr = nullptr;
+    #define ledmatrix (*ledmatrix_ptr)
+    #endif
+    CRGB *matrixleds = nullptr;
+
+    // Neither matrixleds point to anything useful yet because on ESP32 not as much
+    // RAM is available as static array allocation in global space, as RAM you can
+    // get via malloc in setup (or even ps_malloc to use PSRAM as needed).
+    // So we'll call Framebuffer_GFX->newLedsPtr and setvirtdisp to set those pointers correctly
+    FastLED_Protomatter_RGBPanel_FrameBuffer_GFX *matrix = nullptr;
+
 //----------------------------------------------------------------------------
 #elif defined(SMARTMATRIX)
     // CHANGEME for ESP32, see MatrixHardware_ESP32_V0.h in SmartMatrix/src
@@ -1478,16 +1544,32 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
     // It's bad to call Serial.begin twice, if your calling script runs it first, make sure
     // you request that it isn't called a 2nd time here.
     if (initserial) {
-        Serial.begin(115200);
-        Serial.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Serial.begin");
-    }
+      Serial.begin(115200);
 
-    // Teensy takes a while to initialize serial port.
-    // Teensy 3.0, 3.1/3.2, 3.5, 3.6, 4.0+4.1
-    // https://docs.platformio.org/en/latest/platforms/teensy.html
-    #if defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)
-        delay(3000);
-    #endif
+      #ifndef ESP32
+        uint32_t t0 = millis();
+        while (!Serial && (millis() - t0 < 4000)) {
+          delay(500);
+          Serial.println("Priming Serial (especially for RP2xxx chips)");
+          Serial.flush();
+        }
+      #endif
+
+      #ifdef ARDUINO_ARCH_RP2040
+        // this is dirty but needed. On RP2350, Serial returns ok, but the end to 
+        // end connection isn't working and the boot messages are lost without this
+        delay(1000);
+      #endif
+
+      // Teensy takes a while to initialize serial port.
+      // Teensy 3.0, 3.1/3.2, 3.5, 3.6, 4.0+4.1
+      // https://docs.platformio.org/en/latest/platforms/teensy.html
+      #if defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)
+          delay(3000);
+      #endif
+
+      Serial.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Serial.begin");
+    }
     show_free_mem("Memory after setup() starts");
 
     // Smartmatrix defines the framebuffers itself. Other methods make their own allocation here
@@ -1630,6 +1712,66 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
         Serial.println("================================================================================================================");
 
         Serial.println("HUB75 Virtual Matrix Init Done");
+
+    //============================================================================================
+    #elif defined(RP2XXX_HUB75_PROTOMATTER)
+
+        #ifdef ARDUINO_ARCH_RP2040
+            #ifdef USE_TINYUSB
+              // Adafruit TinyUSB is active
+              #include <Adafruit_TinyUSB.h>
+              #define CURRENT_USB_STACK "Adafruit TinyUSB"
+            #else
+              // Pico SDK is active
+              #define CURRENT_USB_STACK "Pico SDK CDC"
+            #endif
+        #endif
+
+        Serial.print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> RP2XXX_HUB75_PROTOMATTER MatrixPanel, total LEDs: ");
+        Serial.println(NUMMATRIX);
+
+        Serial.println("Matrix FB Init");
+        Serial.flush();
+        // it's not a good idea to use global arrays on microcontrollers, so we use malloc here.
+        matrixleds = (CRGB *) mallocordie("matrixleds", sizeof(CRGB) * NUMMATRIX, 1);
+
+        // if you are low on RAM, you can change to false
+        // without double buffering the screen flashes a lot as it's clearing parts of the
+        // framebuffer, so visually you really want it on
+        bool doublebuffering = true;
+        pm_matrix = new Adafruit_Protomatter( WIDTH, BIT_DEPTH, 1, rgbPins, sizeof(addrPins), addrPins, clockPin, latchPin, oePin, doublebuffering );
+        if (!pm_matrix) die("Can't allocate pm_matrix");
+    
+        matrix = new FastLED_Protomatter_RGBPanel_FrameBuffer_GFX(pm_matrix, matrixleds, mw, mh);
+        // Now we can finally set the framebuffer pointer (without this, the lib will crash)
+        if (!matrix) die("Can't allocate _matrix");
+        matrix->newLedsPtr(matrixleds);
+    
+        show_free_mem("After matrixleds malloc");
+        #ifdef LEDMATRIX
+            Serial.println("ledmatrix.SetLEDArray");
+    	ledmatrix_ptr = new cLEDMatrix<MATRIX_TILE_WIDTH, -MATRIX_TILE_HEIGHT, HORIZONTAL_MATRIX, MATRIX_TILE_H, MATRIX_TILE_V, HORIZONTAL_BLOCKS>(false);
+            ledmatrix.SetLEDArray(matrixleds);
+        #endif
+    
+        Serial.println("HUB75 Matrix Init");
+        ProtomatterStatus status = pm_matrix->begin();
+        if (status != PROTOMATTER_OK) {
+          Serial.print("Protomatter failed: ");
+          Serial.println((int)status);
+          die("FAIL");
+        }
+
+        Serial.print("Compiled with USB Stack: ");
+        Serial.println(CURRENT_USB_STACK);
+        #ifdef USE_TINYUSB
+            Serial.println(">>>>>> WARNING: Adafruit TinyUSB does not seem to handle the reboot to bootloader command, compile with Pico SDK, or send 'F' to manually switch to bootloader before you start flashing, or hold boot, press reset, release boot before flashing <<<<<<");
+            #pragma message ">>>>>> WARNING: Adafruit TinyUSB does not seem to handle the reboot to bootloader command, compile with Pico SDK, or send 'F' to manually switch to bootloader before you start flashing, or hold boot, press reset, release boot before flashing <<<<<<";
+        #else 
+            Serial.println(">>>>>> USB stack should support seamless flashing. If that fails, manually switch to bootloader: hold boot, press reset, release boot <<<<<<");
+            #pragma message ">>>>>> USB stack should support seamless flashing. If that fails, manually switch to bootloader: hold boot, press reset, release boot <<<<<<");
+        #endif
+
 
     //============================================================================================
     #elif defined(FRAMEBUFFER)

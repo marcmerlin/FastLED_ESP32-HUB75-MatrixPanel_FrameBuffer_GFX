@@ -5,7 +5,7 @@
 // #define WIFI_SSID "foo"
 // #define WIFI_PASSWORD "bar"
 // #define WIFI_HOSTNAME screen1
-#if __has_include("wifi_secrets.h")
+#if __has_include("wifi_secrets.h") && !defined(ARDUINO_ARCH_RP2040)
     #define WIFI
     #include "wifi_secrets.h"
     #define WIFI_AP_CHANNEL 6
@@ -486,6 +486,7 @@ effects_ptr = new Effects();
     wifi_setup(rebuild_main_page_local, on_ota_start, on_wifi_connect);
   #endif
 
+  matrix->clear();
   display_hostname();
   matrix->show();
 }
