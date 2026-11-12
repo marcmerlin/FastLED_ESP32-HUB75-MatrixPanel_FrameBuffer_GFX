@@ -548,12 +548,19 @@ uint32_t tft_spi_speed;
 // mapping2 is a placeholder to show you what's common to the lib and pin definitions
 #elif defined(ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64) || defined(ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64Y32X2)
     // This impacts ESP32-HUB75-MatrixPanel-I2S-DMA.h. Lower bits to go faster
-    // 7BPP gives 206Hz, but Adafruit Protomatter only does 5bpp, so let's match that and get 
+    // I get this below for PIXEL_COLOR_DEPTH_BITS = 8:
+    // Requested 8 BPP, I2S: 30Mhz, effective bpp to match minimum requested Hz (120): >7<, Panel Refresh: 206hz
+    // 206Hz for 7BPP is not bad but Adafruit Protomatter runs at 5BPP, so let's match that
     // Requested and received BPP: 5, I2S: 30Mhz, minimum requested 120Hz, Panel Refresh: 732Hz (adafruit does 224Hz)
     #define PIXEL_COLOR_DEPTH_BITS 5
     #include <FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX.h>
     // Common code in matrix_setup() below
     #define ESP32_HUB75_MATRIXPANEL
+
+    // take down to 20Mhz or 25Mhz if 30 is too fast for your panels
+    uint32_t mxconfig_i2sspeed = 30000000;
+
+    uint16_t mxconfig_minrefreshrate = 120; // 120Hz refresh at least
 
     #ifdef ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64
         // Step 1) Provide the size of each individual physical panel LED Matrix panel that is chained (or not) together
@@ -1581,21 +1588,16 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
         mxconfig.gpio = _pins;
         // Can help with an off by one pixel display error on some panels
         mxconfig.clkphase = false;
-        // I tried this, too fast for my panels:. It is accepted but it flashes
-        //mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed) 35000000;
-        // this works
-        mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed) 30000000;
-        // take down to 20Mhz if 35, 30, or 25 are too fast for your panels
+
+        mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed) mxconfig_i2sspeed;
+        // take down to 20Mhz if 30, or 25 are too fast for your panels
         // mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_20M;
         // this is the fastest latching, increase to reduce ghosting but it will decrease speed
         mxconfig.latch_blanking = 1;
         // This setting is very important, you tell the library the minimum acceptable 
         // refresh rate, and it will adjust bitplanes to match it
-        mxconfig.min_refresh_rate = 120;   // 120Hz minimum refresh
+        mxconfig.min_refresh_rate = mxconfig_minrefreshrate;   // 120Hz minimum refresh
 
-        // I get this below, 8bpp (isn't possible for 120Mhz, but 7bpp is plenty
-        // Requested 8 BPP, I2S: 30Mhz, effective bpp to match minimum requested Hz (120): >7<, Panel Refresh: 206Mhz
-        // Now the adafruit driver is only 5bpp and reports 220Hz, so let's try it:
 
         // OK, now we can create our matrix object
         hub75matrix = new MatrixPanel_I2S_DMA(mxconfig);
