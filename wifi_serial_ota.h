@@ -952,7 +952,7 @@ void connectionStatus(const char *ssid, bool trying, bool failure, bool success)
 
   if (!ap and failure_cnt > 1) {
       // For the wifi slave, allow switching forever between AP and home test network until one works
-      if (WIFI_SLAVE_MODE and failure_cnt > 2) {
+      if (WIFI_SLAVE_MODE) {
           WebServer->clearWifis();
           WiFi.disconnect();
           failure_cnt = 0;
@@ -967,7 +967,7 @@ void connectionStatus(const char *ssid, bool trying, bool failure, bool success)
 
           }
       // Switch to AP mode after 2 attempts to connect to the test network as slave
-      } else if (! WIFI_SLAVE_MODE) { 
+      } else { 
           Serial.println(">>>>>>>>>>>>>>>>>>>> Too many failures setting up Wifi client to " WIFI_SSID ", switching to Wifi AP mode to " WIFI_AP_SSID);
           ap = true;
           WebServer->clearWifis();
