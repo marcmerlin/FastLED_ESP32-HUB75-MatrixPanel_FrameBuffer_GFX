@@ -256,27 +256,25 @@ void newpattern()//generates all the randomness for each new pattern
     reboot();
   }
   else if (readchar == 'h') {
-    Serial.println(R"(
-h => help
-r => reboot
-n => next pattern
-p => prev pattern
-b => change brightness (if powering panel from USB, too bright can crash)
-B => save brightness to NVRAM (do not save until you test it doesn't crash)
-123 => change to pattern 123)");
-#if defined(ARDUINO_ARCH_RP2040)
-Serial.println("F => Flash/Bootloader Mode");
-#endif
+   
+    Serial.println("h => help");
+    Serial.println("r => reboot");
+    Serial.println("n => next pattern");
+    Serial.println("p => prev pattern");
+    Serial.println("b => change brightness (if powering panel from USB, too bright can crash)");
+    Serial.println("B => save brightness to NVRAM (do not save until you test it doesn't crash)");
+    Serial.println("123 => change to pattern 123");
+    #if defined(ARDUINO_ARCH_RP2040)
+      Serial.println("F => Flash/Bootloader Mode");
+    #endif
 
-#ifdef WIFI
-    Serial.println(R"(
-i => show IP
-d => display hostname
-H => set hostname in NVRAM
-w => set wifi mode (1: slave, 2: AP, 3: ForceAP)
-)");
-#endif
-Serial.println();
+    #ifdef WIFI
+      Serial.println("i => show IP");
+      Serial.println("d => display hostname");
+      Serial.println("H => set hostname in NVRAM");
+      Serial.println("w => set wifi mode (1: slave, 2: AP, 3: ForceAP)");
+    #endif
+    Serial.println("----------------------");
   }
 #ifdef WIFI
   else if (readchar == 'w') {

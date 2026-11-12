@@ -40,6 +40,8 @@ class FastLED_ESP32_HUB75_MatrixPanel_FrameBuffer_GFX : public Framebuffer_GFX {
     void show();
     // 0 to 255
     void setBrightness(uint8_t b) { _hub75matrix->setBrightness(b); };
+    // Returns the hardware I2S DMA matrix refresh rate in Hz
+    uint16_t backend_fps() const { return _hub75matrix ? _hub75matrix->calculated_refresh_rate : 0;  }
 
   protected:
 

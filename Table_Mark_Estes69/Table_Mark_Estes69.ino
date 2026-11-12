@@ -329,12 +329,14 @@ void setup()
   Serial.begin(115200);
   
   // 2. Allow up to 4 seconds for Linux host CDC-ACM enumeration
+  #ifndef ESP32
   uint32_t t0 = millis();
   while (!Serial && (millis() - t0 < 4000)) {
     delay(500);
     Serial.println("Priming Serial (especially for RP2xxx chips)");
     Serial.flush();
   }
+  #endif
 
   // this is dirty but needed. On RP2350, Serial returns ok, but the end to 
   // end connection isn't working and the boot messages are lost without this
@@ -561,7 +563,8 @@ void loop()
     // On ESP32S3 @ 240Mhz, demo 82 at 64x64 updates at 7-10 fps (TODO move RGBPanel ISR to 2nd core)
     Serial.printf("\r\nFramebuffer::GFX fps: %d\r\n", update_freq);
     // 64x64 on RP2350 at 125Mhz is 224 FPS
-    #ifdef ARDUINO_ARCH_RP2040
+    // 64x64 on ESP32S3 at 240Mhz is 100 FPS
+    #if defined(ARDUINO_ARCH_RP2040) || defined(ESP32)
         Serial.printf(">>>> Panel FPS: %d <<<<\r\n", matrix->backend_fps());
     #endif
   }
