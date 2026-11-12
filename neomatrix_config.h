@@ -547,6 +547,10 @@ uint32_t tft_spi_speed;
 //----------------------------------------------------------------------------
 // mapping2 is a placeholder to show you what's common to the lib and pin definitions
 #elif defined(ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64BY64) || defined(ESP32_HUB75_MATRIXPANEL_S3_PORTAL_64Y32X2)
+    // This impacts ESP32-HUB75-MatrixPanel-I2S-DMA.h. Lower bits to go faster
+    // 7BPP gives 206Hz, but Adafruit Protomatter only does 5bpp, so let's match that and get 
+    // Requested and received BPP: 5, I2S: 30Mhz, minimum requested 120Hz, Panel Refresh: 732Hz (adafruit does 224Hz)
+    #define PIXEL_COLOR_DEPTH_BITS 5
     #include <FastLED_ESP32-HUB75-MatrixPanel_FrameBuffer_GFX.h>
     // Common code in matrix_setup() below
     #define ESP32_HUB75_MATRIXPANEL
@@ -1570,9 +1574,28 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
         // Configure your matrix setup here
         HUB75_I2S_CFG mxconfig(PANEL_RES_X, PANEL_RES_Y, PANEL_CHAIN);
 
+        // smoother animations, but uses double the RAM. Decrease for big panels if you are short on RAM
+        // Actually there seems to be a a reression in 3.1.0 of the lib and this is broken, so disable it.
+        //mxconfig.double_buff = true;
+
         mxconfig.gpio = _pins;
         // Can help with an off by one pixel display error on some panels
         mxconfig.clkphase = false;
+        // I tried this, too fast for my panels:. It is accepted but it flashes
+        //mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed) 35000000;
+        // this works
+        mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed) 30000000;
+        // take down to 20Mhz if 35, 30, or 25 are too fast for your panels
+        // mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_20M;
+        // this is the fastest latching, increase to reduce ghosting but it will decrease speed
+        mxconfig.latch_blanking = 1;
+        // This setting is very important, you tell the library the minimum acceptable 
+        // refresh rate, and it will adjust bitplanes to match it
+        mxconfig.min_refresh_rate = 120;   // 120Hz minimum refresh
+
+        // I get this below, 8bpp (isn't possible for 120Mhz, but 7bpp is plenty
+        // Requested 8 BPP, I2S: 30Mhz, effective bpp to match minimum requested Hz (120): >7<, Panel Refresh: 206Mhz
+        // Now the adafruit driver is only 5bpp and reports 220Hz, so let's try it:
 
         // OK, now we can create our matrix object
         hub75matrix = new MatrixPanel_I2S_DMA(mxconfig);
@@ -1590,6 +1613,19 @@ void matrix_setup(bool initserial=true, int reservemem = 40000) {
         Serial.print("MATRIX_HEIGHT: "); Serial.println(PANEL_RES_Y);
         Serial.println("VIRTUAL PANEL WIDTH " + String(VPANEL_W));
         Serial.println("VIRTUAL PANEL HEIGHT " + String(VPANEL_H));
+
+        Serial.println("================================================================================================================");
+#ifdef ESP32_I2S_DMA_HAS_GET_LSBMSB
+        int lsbmsb = hub75matrix->get_lsbMsbTransitionBit();
+        if (lsbmsb) {
+            Serial.printf( "Requested %d BPP, I2S: %dMhz, effective bpp to match minimum requested Hz (%d): >%d<, Panel Refresh: %dhz\r\n", PIXEL_COLOR_DEPTH_BITS, mxconfig.i2sspeed / 1000000, mxconfig.min_refresh_rate, PIXEL_COLOR_DEPTH_BITS-lsbmsb, hub75matrix->calculated_refresh_rate);
+        } else {
+            Serial.printf( "Requested and received BPP: %d, I2S: %dMhz, minimum requested %dHz, Panel Refresh: %dhz\r\n", PIXEL_COLOR_DEPTH_BITS, mxconfig.i2sspeed / 1000000, mxconfig.min_refresh_rate, hub75matrix->calculated_refresh_rate);
+        }
+#else
+        Serial.printf( "Requested %d BPP, I2S: %dMhz, effective bpp to match minimum requested Hz (%d): Unknown, Please add https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/pull/978 , Panel refresh: %dhz\r\n", PIXEL_COLOR_DEPTH_BITS, mxconfig.i2sspeed / 1000000, mxconfig.min_refresh_rate, PIXEL_COLOR_DEPTH_BITS-lsbmsb, hub75matrix->calculated_refresh_rate);
+#endif
+        Serial.println("================================================================================================================");
 
         Serial.println("HUB75 Virtual Matrix Init Done");
 
