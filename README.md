@@ -20,6 +20,10 @@ https://youtu.be/iTXz6gqB7NY (click for video)
 
 <img width="1495" height="752" alt="image" src="https://github.com/user-attachments/assets/335f390d-089e-49fe-8035-333eec47367d" />
 
+Build Options for Adafruit S3 MatrixPortal
+------------------------------------------
+[Adafruit S3 MatrixPortal arduino build options](README_adafruit_matrixportal_s3.txt)
+
 Installation
 ------------
 You need
